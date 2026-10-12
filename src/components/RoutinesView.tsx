@@ -16,7 +16,6 @@ import {
 import { RoutineTemplate, Exercise, UserSettings } from '../types/lifting';
 import { haptics } from '../utils/haptics';
 import { ExerciseLibraryModal } from './ExerciseLibraryModal';
-import { storage } from '../utils/storage';
 
 interface RoutinesViewProps {
   routines: RoutineTemplate[];

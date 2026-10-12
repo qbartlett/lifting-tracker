@@ -1,13 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { storage } from './utils/storage';
-import {
-  ActiveWorkout,
-  CompletedWorkout,
-  Exercise,
-  PersonalRecord,
-  RoutineTemplate,
-  UserSettings,
-} from './types/lifting';
+import { repository } from './storage';
+import { useAppData } from './state/useAppData';
+import { RoutineTemplate, Exercise, CompletedWorkout } from './types/lifting';
 import { TopBar } from './components/TopBar';
 import { BottomNav, TabType } from './components/BottomNav';
 import { ActiveWorkoutView } from './components/ActiveWorkoutView';
@@ -25,15 +19,12 @@ import { MobileTestModal } from './components/MobileTestModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { haptics } from './utils/haptics';
 import { wakeLockService } from './utils/wakeLock';
-import { Dumbbell, Plus, Play, Sparkles, FileSpreadsheet, Flame, Disc, Timer, QrCode } from 'lucide-react';
+import { Play, Flame, Disc, Timer, QrCode } from 'lucide-react';
 
 export default function App() {
-  const [settings, setSettings] = useState<UserSettings>(() => storage.getSettings());
-  const [exercises, setExercises] = useState<Exercise[]>(() => storage.getExercises());
-  const [routines, setRoutines] = useState<RoutineTemplate[]>(() => storage.getRoutines());
-  const [history, setHistory] = useState<CompletedWorkout[]>(() => storage.getHistory());
-  const [prs, setPRs] = useState<Record<string, PersonalRecord>>(() => storage.getPersonalRecords());
-  const [activeWorkout, setActiveWorkout] = useState<ActiveWorkout | null>(() => storage.getActiveWorkout());
+  // All persistent data and the actions that change it live in this hook.
+  const data = useAppData(repository);
+  const { settings, exercises, routines, history, progression, personalRecords, activeWorkout } = data;
 
   const [currentTab, setCurrentTab] = useState<TabType>(() => (activeWorkout ? 'workout' : 'routines'));
 
@@ -62,102 +53,21 @@ export default function App() {
     }
   }, [activeWorkout, settings.keepScreenAwake]);
 
-  // Sync active workout to localStorage
-  const handleUpdateActiveWorkout = (workout: ActiveWorkout | null) => {
-    setActiveWorkout(workout);
-    storage.saveActiveWorkout(workout);
-  };
-
   const startEmptyWorkout = () => {
     haptics.medium();
-    const newWorkout: ActiveWorkout = {
-      id: `workout-${Date.now()}`,
-      name: 'Freestyle Workout',
-      startTime: Date.now(),
-      exercises: [],
-    };
-    handleUpdateActiveWorkout(newWorkout);
+    data.startEmptyWorkout();
     setCurrentTab('workout');
   };
 
   const startRoutineWorkout = (routine: RoutineTemplate) => {
     haptics.medium();
-    const progressionConfigs = storage.getProgressionConfigs();
-
-    const newWorkout: ActiveWorkout = {
-      id: `workout-${Date.now()}`,
-      name: routine.name,
-      routineId: routine.id,
-      startTime: Date.now(),
-      exercises: routine.exercises.map((item, idx) => {
-        const foundEx = exercises.find((e) => e.id === item.exerciseId);
-        const ex: Exercise = foundEx || {
-          id: item.exerciseId,
-          name: 'Exercise',
-          category: 'Chest',
-          equipment: 'Barbell',
-        };
-
-        const defaultWeight = progressionConfigs[item.exerciseId]?.currentWeight || 135;
-
-        const sets = Array.from({ length: item.targetSets }).map((_, sIdx) => ({
-          id: `set-${Date.now()}-${idx}-${sIdx}`,
-          type: 'normal' as const,
-          weight: defaultWeight,
-          reps: item.targetReps,
-          completed: false,
-        }));
-
-        return {
-          id: `we-${Date.now()}-${idx}`,
-          exerciseId: item.exerciseId,
-          exercise: ex,
-          restTimerSeconds: item.restSeconds || 120,
-          sets,
-        };
-      }),
-    };
-
-    handleUpdateActiveWorkout(newWorkout);
+    data.startRoutineWorkout(routine);
     setCurrentTab('workout');
   };
 
   const handleAddExerciseToWorkout = (exercise: Exercise) => {
     haptics.light();
-    let current = activeWorkout;
-    if (!current) {
-      current = {
-        id: `workout-${Date.now()}`,
-        name: 'Quick Workout',
-        startTime: Date.now(),
-        exercises: [],
-      };
-    }
-
-    const configs = storage.getProgressionConfigs();
-    const defaultWeight = configs[exercise.id]?.currentWeight || 95;
-
-    const newWorkoutExercise = {
-      id: `we-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      exerciseId: exercise.id,
-      exercise,
-      restTimerSeconds: settings.defaultRestTimeSeconds || 120,
-      sets: [
-        {
-          id: `s-${Date.now()}-1`,
-          type: 'normal' as const,
-          weight: defaultWeight,
-          reps: 5,
-          completed: false,
-        },
-      ],
-    };
-
-    const updated = {
-      ...current,
-      exercises: [...current.exercises, newWorkoutExercise],
-    };
-    handleUpdateActiveWorkout(updated);
+    data.addExerciseToActiveWorkout(exercise);
     setShowExerciseLibrary(false);
     setCurrentTab('workout');
   };
@@ -169,30 +79,7 @@ export default function App() {
   };
 
   const handleSaveCompletedWorkout = (completed: CompletedWorkout) => {
-    storage.addCompletedWorkout(completed);
-
-    // Auto-update progression targets if 5x5 passed!
-    const configs = storage.getProgressionConfigs();
-    let updatedConfigs = false;
-
-    for (const we of completed.exercises) {
-      const cfg = configs[we.exerciseId];
-      if (cfg) {
-        const completedSets = we.sets.filter((s) => s.completed && s.reps >= 5);
-        const requiredSets = cfg.defaultSetsReps === '1x5' ? 1 : 5;
-        if (completedSets.length >= requiredSets) {
-          cfg.currentWeight += cfg.weightIncrement;
-          updatedConfigs = true;
-        }
-      }
-    }
-    if (updatedConfigs) {
-      storage.saveProgressionConfigs(configs);
-    }
-
-    setHistory(storage.getHistory());
-    setPRs(storage.getPersonalRecords());
-    handleUpdateActiveWorkout(null);
+    data.completeWorkout(completed);
     setShowFinishModal(false);
     setRestTimer(null);
     setCurrentTab('history');
@@ -201,7 +88,7 @@ export default function App() {
   const handleCancelWorkout = () => {
     if (confirm('Discard this workout? Recorded sets will not be saved.')) {
       haptics.medium();
-      handleUpdateActiveWorkout(null);
+      data.discardWorkout();
       setRestTimer(null);
       setCurrentTab('routines');
     }
@@ -215,42 +102,20 @@ export default function App() {
     });
   };
 
-  const handleAddCustomExercise = (newEx: Exercise) => {
-    storage.addCustomExercise(newEx);
-    setExercises(storage.getExercises());
-  };
-
-  const handleSaveRoutine = (routine: RoutineTemplate) => {
-    const list = storage.getRoutines();
-    list.unshift(routine);
-    storage.saveRoutines(list);
-    setRoutines(storage.getRoutines());
-  };
-
-  const handleDeleteRoutine = (routineId: string) => {
-    const list = storage.getRoutines().filter((r) => r.id !== routineId);
-    storage.saveRoutines(list);
-    setRoutines(storage.getRoutines());
-  };
-
-  const handleDeleteHistoryWorkout = (id: string) => {
-    storage.deleteCompletedWorkout(id);
-    setHistory(storage.getHistory());
-    setPRs(storage.getPersonalRecords());
-  };
-
-  const handleUpdateSettings = (newSettings: UserSettings) => {
-    storage.saveSettings(newSettings);
-    setSettings(newSettings);
-  };
-
-  const handleDataSynced = () => {
-    setHistory(storage.getHistory());
-    setPRs(storage.getPersonalRecords());
-    setRoutines(storage.getRoutines());
-  };
-
-  const workoutARoutine = routines.find((r) => r.id === 'stronglifts-workout-a') || routines[0];
+  // "Up next" card: Workout A if present, otherwise the first routine.
+  const nextRoutine = routines.find((r) => r.id === 'stronglifts-workout-a') || routines[0];
+  const nextRoutineSummary = nextRoutine
+    ? nextRoutine.exercises
+        .map((item) => {
+          const name =
+            progression[item.exerciseId]?.name ??
+            exercises.find((e) => e.id === item.exerciseId)?.name ??
+            'Exercise';
+          const weight = progression[item.exerciseId]?.currentWeight;
+          return weight ? `${name} ${weight} ${settings.weightUnit}` : name;
+        })
+        .join(' · ')
+    : '';
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex justify-center">
@@ -276,7 +141,7 @@ export default function App() {
                 <ActiveWorkoutView
                   workout={activeWorkout}
                   settings={settings}
-                  onUpdateWorkout={handleUpdateActiveWorkout}
+                  onUpdateWorkout={data.setActiveWorkout}
                   onOpenExerciseLibrary={() => setShowExerciseLibrary(true)}
                   onStartRestTimer={handleStartRestTimer}
                   onFinishWorkout={handleFinishWorkout}
@@ -285,28 +150,26 @@ export default function App() {
               ) : (
                 <div className="pt-6 pb-32 text-center space-y-4">
                   {/* Up Next Card in Dark & Red Theme */}
-                  <div className="p-4 rounded-3xl border border-red-500/40 bg-gradient-to-br from-red-600/15 via-zinc-900 to-zinc-950 text-left shadow-2xl ring-1 ring-red-500/20">
-                    <div className="flex items-center gap-1.5 text-[11px] font-black text-red-500 uppercase tracking-wide">
-                      <Flame className="w-3.5 h-3.5 fill-current" />
-                      <span>UP NEXT: 5x5 WORKOUT A</span>
-                    </div>
-                    <h3 className="text-lg font-black text-white tracking-tight mt-1">
-                      Ready for Oct 9 Session
-                    </h3>
-                    <p className="text-xs text-zinc-300 mt-1">
-                      Squat 200 lbs · Bench 175 lbs · Barbell Row 125 lbs (5×5)
-                    </p>
+                  {nextRoutine && (
+                    <div className="p-4 rounded-3xl border border-red-500/40 bg-gradient-to-br from-red-600/15 via-zinc-900 to-zinc-950 text-left shadow-2xl ring-1 ring-red-500/20">
+                      <div className="flex items-center gap-1.5 text-[11px] font-black text-red-500 uppercase tracking-wide">
+                        <Flame className="w-3.5 h-3.5 fill-current" />
+                        <span>UP NEXT: {nextRoutine.name.split(' (')[0]}</span>
+                      </div>
+                      <h3 className="text-lg font-black text-white tracking-tight mt-1">
+                        Ready for your next session
+                      </h3>
+                      <p className="text-xs text-zinc-300 mt-1">{nextRoutineSummary}</p>
 
-                    <button
-                      onClick={() => {
-                        if (workoutARoutine) startRoutineWorkout(workoutARoutine);
-                      }}
-                      className="mt-3.5 w-full py-3 rounded-2xl bg-red-600 text-white font-black text-xs hover:bg-red-500 active:scale-95 transition shadow-lg shadow-red-600/30 flex items-center justify-center gap-2"
-                    >
-                      <Play className="w-4 h-4 fill-current" />
-                      <span>Start Workout A</span>
-                    </button>
-                  </div>
+                      <button
+                        onClick={() => startRoutineWorkout(nextRoutine)}
+                        className="mt-3.5 w-full py-3 rounded-2xl bg-red-600 text-white font-black text-xs hover:bg-red-500 active:scale-95 transition shadow-lg shadow-red-600/30 flex items-center justify-center gap-2"
+                      >
+                        <Play className="w-4 h-4 fill-current" />
+                        <span>Start Workout</span>
+                      </button>
+                    </div>
+                  )}
 
                   {/* Quick gym utilities bar with Phone Test */}
                   <div className="grid grid-cols-3 gap-2 max-w-sm mx-auto">
@@ -359,8 +222,8 @@ export default function App() {
               settings={settings}
               onStartRoutine={startRoutineWorkout}
               onStartEmptyWorkout={startEmptyWorkout}
-              onSaveRoutine={handleSaveRoutine}
-              onDeleteRoutine={handleDeleteRoutine}
+              onSaveRoutine={data.saveRoutine}
+              onDeleteRoutine={data.deleteRoutine}
               onOpenSpreadsheetHub={() => setShowSpreadsheetHub(true)}
             />
           )}
@@ -368,9 +231,9 @@ export default function App() {
           {currentTab === 'exercises' && (
             <ExerciseCatalogView
               exercises={exercises}
-              personalRecords={prs}
+              personalRecords={personalRecords}
               settings={settings}
-              onAddCustomExercise={handleAddCustomExercise}
+              onAddCustomExercise={data.addCustomExercise}
               onSelectForWorkout={handleAddExerciseToWorkout}
             />
           )}
@@ -378,9 +241,9 @@ export default function App() {
           {currentTab === 'history' && (
             <HistoryView
               history={history}
-              personalRecords={prs}
+              personalRecords={personalRecords}
               settings={settings}
-              onDeleteWorkout={handleDeleteHistoryWorkout}
+              onDeleteWorkout={data.deleteWorkout}
             />
           )}
         </main>
@@ -415,7 +278,9 @@ export default function App() {
         {showSpreadsheetHub && (
           <SpreadsheetSyncModal
             onClose={() => setShowSpreadsheetHub(false)}
-            onDataSynced={handleDataSynced}
+            csv={data.getSpreadsheetCsv()}
+            configs={progression}
+            onSync={data.syncSpreadsheet}
           />
         )}
 
@@ -440,7 +305,10 @@ export default function App() {
         {showSettings && (
           <SettingsModal
             settings={settings}
-            onUpdateSettings={handleUpdateSettings}
+            onUpdateSettings={data.updateSettings}
+            onExportBackup={data.exportBackup}
+            onImportBackup={data.importBackup}
+            onResetData={data.resetAll}
             onOpenPlateCalc={() => setShowPlateCalc(true)}
             onOpen1RMCalc={() => setShow1RMCalc(true)}
             onOpenMobileTest={() => setShowMobileTest(true)}
@@ -463,7 +331,7 @@ export default function App() {
           <ExerciseLibraryModal
             exercises={exercises}
             onSelectExercise={handleAddExerciseToWorkout}
-            onAddCustomExercise={handleAddCustomExercise}
+            onAddCustomExercise={data.addCustomExercise}
             onClose={() => setShowExerciseLibrary(false)}
           />
         )}

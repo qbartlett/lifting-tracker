@@ -13,13 +13,15 @@ import {
 } from 'lucide-react';
 import { UserSettings } from '../types/lifting';
 import { haptics } from '../utils/haptics';
-import { storage } from '../utils/storage';
 import { PWAInstallButton } from './PWAInstallButton';
 import { wakeLockService } from '../utils/wakeLock';
 
 interface SettingsModalProps {
   settings: UserSettings;
   onUpdateSettings: (settings: UserSettings) => void;
+  onExportBackup: () => string;
+  onImportBackup: (json: string) => boolean;
+  onResetData: () => void;
   onOpenPlateCalc: () => void;
   onOpen1RMCalc: () => void;
   onOpenMobileTest?: () => void;
@@ -29,6 +31,9 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   onUpdateSettings,
+  onExportBackup,
+  onImportBackup,
+  onResetData,
   onOpenPlateCalc,
   onOpen1RMCalc,
   onOpenMobileTest,
@@ -47,7 +52,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleExportData = () => {
     haptics.medium();
-    const json = storage.exportDataJSON();
+    const json = onExportBackup();
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -64,7 +69,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result as string;
-      const success = storage.importDataJSON(content);
+      const success = onImportBackup(content);
       if (success) {
         haptics.celebratePR();
         setImportStatus('Backup restored successfully! Refreshing...');
@@ -385,7 +390,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <button
               onClick={() => {
                 if (confirm('Reset to initial sample workouts and spreadsheet data?')) {
-                  storage.resetDemoData();
+                  onResetData();
                   window.location.reload();
                 }
               }}

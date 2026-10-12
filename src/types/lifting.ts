@@ -108,3 +108,17 @@ export interface UserSettings {
   keepScreenAwake: boolean;
   theme: 'dark';
 }
+
+/** Linear-progression settings for one lift (StrongLifts-style). */
+export interface ProgressionConfig {
+  exerciseId: string;
+  name: string;
+  startingWeight: number;
+  weightIncrement: number;
+  /** e.g. '5x5' or '1x5' */
+  defaultSetsReps: string;
+  currentWeight: number;
+}
+
+export type ProgressionConfigs = Record<string, ProgressionConfig>;
+export type PersonalRecords = Record<string, PersonalRecord>;

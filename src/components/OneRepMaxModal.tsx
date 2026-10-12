@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Award, Flame } from 'lucide-react';
-import { oneRepMax } from '../utils/oneRepMax';
+import { oneRepMax } from '../domain/oneRepMax';
 import { haptics } from '../utils/haptics';
 
 interface OneRepMaxModalProps {
