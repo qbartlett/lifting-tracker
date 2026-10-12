@@ -1,0 +1,6 @@
+{
+  "name": "IronTrack - Android Lifting Tracker",
+  "description": "Tactile, production-grade weightlifting and bodybuilding tracker for Android with rest timers, RPE, 1RM calculators, plate loader, and workout history.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
