@@ -7,24 +7,26 @@ import {
   RefreshCw,
   Copy,
 } from 'lucide-react';
-import { storage } from '../utils/storage';
+import type { ProgressionConfigs } from '../types/lifting';
 import { haptics } from '../utils/haptics';
 
 interface SpreadsheetSyncModalProps {
+  csv: string;
+  configs: ProgressionConfigs;
+  onSync: (csv: string) => void;
   onClose: () => void;
-  onDataSynced: () => void;
 }
 
 export const SpreadsheetSyncModal: React.FC<SpreadsheetSyncModalProps> = ({
+  csv,
+  configs,
+  onSync,
   onClose,
-  onDataSynced,
 }) => {
-  const [csvContent, setCsvContent] = useState<string>(() => storage.getSpreadsheetCSV());
+  const [csvContent, setCsvContent] = useState<string>(csv);
   const [activeSubTab, setActiveSubTab] = useState<'view' | 'edit'>('view');
   const [copied, setCopied] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-
-  const configs = storage.getProgressionConfigs();
 
   const handleCopy = () => {
     navigator.clipboard.writeText(csvContent);
@@ -48,9 +50,8 @@ export const SpreadsheetSyncModal: React.FC<SpreadsheetSyncModalProps> = ({
 
   const handleSaveAndSync = () => {
     haptics.medium();
-    storage.saveSpreadsheetCSV(csvContent);
+    onSync(csvContent);
     setStatusMessage('Spreadsheet data synced and history updated!');
-    onDataSynced();
     setTimeout(() => {
       setStatusMessage(null);
     }, 2500);

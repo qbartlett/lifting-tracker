@@ -1,20 +1,46 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# IronTrack
 
-# Run and deploy your AI Studio app
+Offline-first lifting tracker (React 19 + Vite + Tailwind 4, installable PWA).
+Workouts, routines, exercise library, PRs, plate and 1RM calculators, rest timer,
+and StrongLifts-style linear progression.
 
-This contains everything you need to run your app locally.
+## Run
 
-View your app in AI Studio: https://ai.studio/apps/fe125a00-f3b1-4d97-bdfa-1161c19409c9
+```bash
+bun install        # or: npm install
+bun run dev        # http://localhost:3000
+bun run build
+bun run lint       # tsc --noEmit
+bun test           # unit tests (domain + storage)
+```
 
-## Run Locally
+No API keys or environment variables are needed.
 
-**Prerequisites:**  Node.js
+## Architecture
 
+```
+src/
+  domain/    Pure logic, no React/browser APIs. Fully unit-tested.
+             records (PRs), progression, workoutFactory, csvImport, oneRepMax, plateCalculator
+  storage/   AppRepository interface + localStorage implementation + seed data sets.
+             This is the ONLY place that knows where data lives.
+  state/     useAppData: React state + actions, persisting through the repository.
+  components/  UI. Receives data and callbacks as props; never touches storage.
+  data/      Static data: exercise library, starter (seed) workout log and routines.
+  utils/     Browser helpers: haptics, audio, wake lock.
+  hooks/     usePWAInstall.
+  types/     Shared TypeScript types.
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Data flow: `component -> callback from useAppData -> repository -> storage`.
+Personal records are derived from workout history, never stored separately.
+
+### Moving to a backend
+
+1. Implement `AppRepository` (src/storage/repository.ts) against the new backend.
+2. Make its methods async and update `useAppData`, the only consumer.
+3. Change one line in `src/storage/index.ts`.
+4. Start new accounts from `EMPTY_SEED` (src/storage/seeds.ts) instead of `DEFAULT_SEED`,
+   which is the original owner's starter log.
+
+Existing on-device data keeps working: the localStorage keys are unchanged.

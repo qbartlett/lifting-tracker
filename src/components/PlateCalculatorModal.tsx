@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Plus, Minus, Disc } from 'lucide-react';
-import { calculatePlates } from '../utils/plateCalculator';
+import { calculatePlates } from '../domain/plateCalculator';
 import { haptics } from '../utils/haptics';
 
 interface PlateCalculatorModalProps {
