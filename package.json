@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "test": "bun test",
+    "test": "bun test src",
     "clean": "rm -rf dist"
   },
   "dependencies": {

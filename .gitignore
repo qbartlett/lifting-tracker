@@ -6,3 +6,4 @@ dev-dist
 !.env.example
 *.local
 .DS_Store
+server/.env

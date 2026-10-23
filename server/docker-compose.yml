@@ -1,0 +1,32 @@
+# Local/self-hosted stack: API + Postgres.
+#   POSTGRES_PASSWORD=change-me CORS_ORIGINS=https://app.example.com docker compose up -d --build
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: irontrack
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: irontrack
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U irontrack"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://irontrack:${POSTGRES_PASSWORD}@db:5432/irontrack
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
+    ports:
+      - "8787:8787"
+
+volumes:
+  dbdata:
