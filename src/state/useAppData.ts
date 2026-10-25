@@ -1,5 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { AppRepository } from '../storage/repository';
+import type { RemoteChange } from '../api/client';
+import { applyRemoteChanges, type Snapshot } from '../sync/docs';
 import type {
   ActiveWorkout,
   CompletedWorkout,
@@ -32,14 +34,43 @@ export function useAppData(repo: AppRepository) {
   // Records are derived from history, never stored separately.
   const personalRecords = useMemo(() => computePersonalRecords(history), [history]);
 
+  // Always-current view of the synced data, for the sync engine (which runs outside React renders).
+  const latest = useRef<Snapshot>({ history, routines, exercises, settings, progression });
+  latest.current = { history, routines, exercises, settings, progression };
+
   const reload = useCallback(() => {
-    setSettings(repo.getSettings());
-    setExercises(repo.getExercises());
-    setRoutines(repo.getRoutines());
-    setHistory(repo.getHistory());
-    setProgression(repo.getProgression());
+    const next: Snapshot = {
+      settings: repo.getSettings(),
+      exercises: repo.getExercises(),
+      routines: repo.getRoutines(),
+      history: repo.getHistory(),
+      progression: repo.getProgression(),
+    };
+    latest.current = next;
+    setSettings(next.settings);
+    setExercises(next.exercises);
+    setRoutines(next.routines);
+    setHistory(next.history);
+    setProgression(next.progression);
     setActiveWorkoutState(repo.getActiveWorkout());
   }, [repo]);
+
+  const getSnapshot = useCallback((): Snapshot => latest.current, []);
+
+  /** Merges changes downloaded by the sync engine into state and storage. */
+  const applyRemote = useCallback(
+    (changes: RemoteChange[]) => {
+      const cur = latest.current;
+      const next = applyRemoteChanges(cur, changes);
+      latest.current = next;
+      if (next.history !== cur.history) { setHistory(next.history); repo.saveHistory(next.history); }
+      if (next.routines !== cur.routines) { setRoutines(next.routines); repo.saveRoutines(next.routines); }
+      if (next.exercises !== cur.exercises) { setExercises(next.exercises); repo.saveExercises(next.exercises); }
+      if (next.settings !== cur.settings) { setSettings(next.settings); repo.saveSettings(next.settings); }
+      if (next.progression !== cur.progression) { setProgression(next.progression); repo.saveProgression(next.progression); }
+    },
+    [repo]
+  );
 
   // ---- active workout ---------------------------------------------------
   const setActiveWorkout = useCallback(
@@ -190,6 +221,8 @@ export function useAppData(repo: AppRepository) {
     activeWorkout,
     // actions
     getSpreadsheetCsv: () => repo.getSpreadsheetCsv(),
+    getSnapshot,
+    applyRemote,
     setActiveWorkout,
     startEmptyWorkout,
     startRoutineWorkout,

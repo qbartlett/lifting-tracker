@@ -389,14 +389,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             <button
               onClick={() => {
-                if (confirm('Reset to initial sample workouts and spreadsheet data?')) {
+                if (confirm('Erase all workouts, routines and settings on this device? If you are signed in, they will be restored from your account.')) {
                   onResetData();
                   window.location.reload();
                 }
               }}
               className="w-full py-2 text-center text-xs text-zinc-500 hover:text-red-400 transition"
             >
-              Reset to Spreadsheet Defaults
+              Reset this device
             </button>
           </div>
         </div>

@@ -1,18 +1,21 @@
 import React from 'react';
-import { Dumbbell, Layers, BookOpen, History } from 'lucide-react';
+import { Dumbbell, Layers, BookOpen, History, Users } from 'lucide-react';
 import { haptics } from '../utils/haptics';
 
-export type TabType = 'workout' | 'routines' | 'exercises' | 'history';
+export type TabType = 'workout' | 'routines' | 'exercises' | 'history' | 'coach';
 
 interface BottomNavProps {
   activeTab: TabType;
   hasActiveWorkout: boolean;
+  /** Show the Coach tab (signed-in coaches only). */
+  showCoach?: boolean;
   onTabChange: (tab: TabType) => void;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
   activeTab,
   hasActiveWorkout,
+  showCoach = false,
   onTabChange,
 }) => {
   const tabs = [
@@ -37,11 +40,15 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       label: 'History',
       icon: History,
     },
+    ...(showCoach ? [{ id: 'coach' as TabType, label: 'Coach', icon: Users }] : []),
   ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-30 bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800/80 pb-safe">
-      <div className="max-w-md mx-auto grid grid-cols-4 items-center h-16 px-2">
+      <div
+        className="max-w-md mx-auto grid items-center h-16 px-2"
+        style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
+      >
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;

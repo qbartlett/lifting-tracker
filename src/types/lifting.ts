@@ -122,3 +122,5 @@ export interface ProgressionConfig {
 
 export type ProgressionConfigs = Record<string, ProgressionConfig>;
 export type PersonalRecords = Record<string, PersonalRecord>;
+
+export type WeightUnit = UserSettings['weightUnit'];
