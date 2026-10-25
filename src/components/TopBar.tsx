@@ -1,5 +1,5 @@
 import React from 'react';
-import { Disc, Settings, Timer, FileSpreadsheet, Dumbbell, QrCode } from 'lucide-react';
+import { Disc, Settings, Timer, FileSpreadsheet, Dumbbell, QrCode, UserRound } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 import { haptics } from '../utils/haptics';
 
@@ -11,6 +11,9 @@ interface TopBarProps {
   onOpenSpreadsheetHub?: () => void;
   onTriggerRestTimer?: () => void;
   onOpenMobileTest?: () => void;
+  /** Omit to hide the account button (no server configured). */
+  onOpenAccount?: () => void;
+  signedIn?: boolean;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -21,6 +24,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenSpreadsheetHub,
   onTriggerRestTimer,
   onOpenMobileTest,
+  onOpenAccount,
+  signedIn = false,
 }) => {
   return (
     <header className="sticky top-0 z-30 h-14 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/80 px-3.5 sm:px-4 flex items-center justify-between">
@@ -101,6 +106,23 @@ export const TopBar: React.FC<TopBarProps> = ({
             className="p-2 rounded-xl text-emerald-400 hover:text-emerald-300 hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition"
           >
             <FileSpreadsheet className="w-4 h-4" />
+          </button>
+        )}
+
+        {/* Account */}
+        {onOpenAccount && (
+          <button
+            onClick={() => {
+              haptics.light();
+              onOpenAccount();
+            }}
+            title={signedIn ? 'Account' : 'Sign in'}
+            aria-label={signedIn ? 'Account' : 'Sign in'}
+            className={`p-2 rounded-xl hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition ${
+              signedIn ? 'text-emerald-400 hover:text-emerald-300' : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <UserRound className="w-4 h-4" />
           </button>
         )}
 

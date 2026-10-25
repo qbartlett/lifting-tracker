@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { repository } from './storage';
 import { useAppData } from './state/useAppData';
+import { useAuth } from './state/useAuth';
+import { useSync } from './state/useSync';
+import { defaultApiBaseUrl } from './api/client';
 import { RoutineTemplate, Exercise, CompletedWorkout } from './types/lifting';
 import { TopBar } from './components/TopBar';
 import { BottomNav, TabType } from './components/BottomNav';
@@ -17,6 +20,8 @@ import { ExerciseLibraryModal } from './components/ExerciseLibraryModal';
 import { SpreadsheetSyncModal } from './components/SpreadsheetSyncModal';
 import { MobileTestModal } from './components/MobileTestModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { AccountModal } from './components/AccountModal';
+import { CoachView } from './components/CoachView';
 import { haptics } from './utils/haptics';
 import { wakeLockService } from './utils/wakeLock';
 import { Play, Flame, Disc, Timer, QrCode } from 'lucide-react';
@@ -24,6 +29,11 @@ import { Play, Flame, Disc, Timer, QrCode } from 'lucide-react';
 export default function App() {
   // All persistent data and the actions that change it live in this hook.
   const data = useAppData(repository);
+  // Accounts and cloud sync are optional: without a server URL the app stays fully local.
+  const accountsEnabled = defaultApiBaseUrl() !== '';
+  const auth = useAuth();
+  const sync = useSync(data, auth);
+  const isCoach = accountsEnabled && auth.user?.role === 'coach';
   const { settings, exercises, routines, history, progression, personalRecords, activeWorkout } = data;
 
   const [currentTab, setCurrentTab] = useState<TabType>(() => (activeWorkout ? 'workout' : 'routines'));
@@ -36,6 +46,7 @@ export default function App() {
   const [showExerciseLibrary, setShowExerciseLibrary] = useState(false);
   const [showSpreadsheetHub, setShowSpreadsheetHub] = useState(false);
   const [showMobileTest, setShowMobileTest] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
 
   // Rest Timer State
   const [restTimer, setRestTimer] = useState<{
@@ -52,6 +63,16 @@ export default function App() {
       wakeLockService.release();
     }
   }, [activeWorkout, settings.keepScreenAwake]);
+
+  // Leaving the coach role (signing out) while on the Coach tab would leave a blank screen.
+  useEffect(() => {
+    if (currentTab === 'coach' && !isCoach) setCurrentTab('routines');
+  }, [currentTab, isCoach]);
+
+  // If the session expires, bring up the sign-in dialog with an explanation.
+  useEffect(() => {
+    if (auth.notice) setShowAccount(true);
+  }, [auth.notice]);
 
   const startEmptyWorkout = () => {
     haptics.medium();
@@ -131,6 +152,8 @@ export default function App() {
           onOpenSpreadsheetHub={() => setShowSpreadsheetHub(true)}
           onTriggerRestTimer={() => handleStartRestTimer(settings.defaultRestTimeSeconds || 120, 'Rest Interval')}
           onOpenMobileTest={() => setShowMobileTest(true)}
+          onOpenAccount={accountsEnabled ? () => setShowAccount(true) : undefined}
+          signedIn={!!auth.user}
         />
 
         {/* Main Content Area */}
@@ -238,6 +261,10 @@ export default function App() {
             />
           )}
 
+          {currentTab === 'coach' && isCoach && (
+            <CoachView api={auth.api} unit={settings.weightUnit} />
+          )}
+
           {currentTab === 'history' && (
             <HistoryView
               history={history}
@@ -266,8 +293,33 @@ export default function App() {
         <BottomNav
           activeTab={currentTab}
           hasActiveWorkout={!!activeWorkout}
+          showCoach={isCoach}
           onTabChange={(tab) => setCurrentTab(tab)}
         />
+
+        {showAccount && (
+          <AccountModal
+            user={auth.user}
+            coach={auth.coach}
+            notice={auth.notice}
+            syncStatus={sync.status}
+            lastSyncedAt={sync.lastSyncedAt}
+            syncError={sync.error}
+            onLogin={auth.login}
+            onRegister={auth.register}
+            onLogout={auth.logout}
+            onLeaveCoach={auth.leaveCoach}
+            onDeleteAccount={async (password) => {
+              await auth.deleteAccount(password);
+              sync.releaseDevice();
+            }}
+            onSyncNow={sync.syncNow}
+            onClose={() => {
+              auth.dismissNotice();
+              setShowAccount(false);
+            }}
+          />
+        )}
 
         {/* Mobile Test QR Code Modal */}
         {showMobileTest && (
@@ -308,7 +360,11 @@ export default function App() {
             onUpdateSettings={data.updateSettings}
             onExportBackup={data.exportBackup}
             onImportBackup={data.importBackup}
-            onResetData={data.resetAll}
+            onResetData={() => {
+              data.resetAll();
+              // Forget what the server had, so the next sync restores from the account instead of deleting it.
+              sync.forgetSyncState();
+            }}
             onOpenPlateCalc={() => setShowPlateCalc(true)}
             onOpen1RMCalc={() => setShow1RMCalc(true)}
             onOpenMobileTest={() => setShowMobileTest(true)}
