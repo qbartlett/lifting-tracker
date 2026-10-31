@@ -14,6 +14,19 @@ bun test                        # integration tests; needs a throwaway Postgres 
 ```
 
 Or with Docker: `POSTGRES_PASSWORD=... CORS_ORIGINS=https://your-app docker compose up -d --build`.
+For a real deployment (HTTPS, app + API on one domain, backups) use [`../deploy`](../deploy/README.md).
+
+### Environment
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Postgres connection string (required) |
+| `PORT` | default 8787 |
+| `APP_URL` | Public address of the app, e.g. `https://app.example.com`. Used in password reset links |
+| `SMTP_URL`, `MAIL_FROM` | Outgoing email: `smtps://user:pass@host` (465) or `smtp://user:pass@host:587` (STARTTLS required). Without them, production logs a warning and reset emails are not sent; in development they print to the console |
+| `RESET_TTL_MINUTES` | Reset link lifetime, default 60 |
+| `CORS_ORIGINS` | Comma-separated origins allowed from a browser. Not needed when app and API share a domain |
+| `TRUST_PROXY` | `1` only behind a reverse proxy that sets `X-Forwarded-For` |
 
 Tests drop and recreate the `public` schema of `TEST_DATABASE_URL`
 (default `postgres://postgres@localhost:54329/irontrack_test`). **Never point it at real data.**
@@ -37,6 +50,8 @@ Errors look like `{"error": {"code": "...", "message": "..."}}`.
 | POST | `/auth/register` | anyone | `{email, name, password}` creates a coach. With `inviteCode` creates a client linked to that coach. Returns `{token, user}` |
 | POST | `/auth/login` | anyone | `{email, password}` → `{token, user}`. Rate limited |
 | POST | `/auth/logout` | user | Invalidates the token |
+| POST | `/auth/forgot` | anyone | `{email}` emails a reset link. Always answers the same, so it cannot be used to find out who has an account. Rate limited |
+| POST | `/auth/reset` | anyone | `{token, password}` sets a new password and signs out every device. Links work once |
 | GET | `/me` | user | `{user, coach}` (`coach` is null unless a linked client) |
 | DELETE | `/me/coach` | client | Leave your coach |
 | DELETE | `/me` | user | `{password}`. Deletes the account and all its data |
@@ -64,4 +79,4 @@ A push entry rejected with `reason: "stale"` means the server has a newer versio
 
 ## Not built yet
 
-Password reset and email verification (needs an email provider), coach-assigned programs, billing, admin tooling.
+Email verification, coach-assigned programs, billing, admin tooling.

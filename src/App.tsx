@@ -4,6 +4,7 @@ import { useAppData } from './state/useAppData';
 import { useAuth } from './state/useAuth';
 import { useSync } from './state/useSync';
 import { defaultApiBaseUrl } from './api/client';
+import { clearResetFragment, readResetToken } from './auth/resetLink';
 import { RoutineTemplate, Exercise, CompletedWorkout } from './types/lifting';
 import { TopBar } from './components/TopBar';
 import { BottomNav, TabType } from './components/BottomNav';
@@ -47,6 +48,8 @@ export default function App() {
   const [showSpreadsheetHub, setShowSpreadsheetHub] = useState(false);
   const [showMobileTest, setShowMobileTest] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
+  // Opened from a password reset email? Read the token once, then remove it from the address bar.
+  const [resetToken, setResetToken] = useState<string | null>(() => (accountsEnabled ? readResetToken(window.location.hash) : null));
 
   // Rest Timer State
   const [restTimer, setRestTimer] = useState<{
@@ -68,6 +71,13 @@ export default function App() {
   useEffect(() => {
     if (currentTab === 'coach' && !isCoach) setCurrentTab('routines');
   }, [currentTab, isCoach]);
+
+  useEffect(() => {
+    if (resetToken) {
+      clearResetFragment();
+      setShowAccount(true);
+    }
+  }, [resetToken]);
 
   // If the session expires, bring up the sign-in dialog with an explanation.
   useEffect(() => {
@@ -305,6 +315,9 @@ export default function App() {
             syncStatus={sync.status}
             lastSyncedAt={sync.lastSyncedAt}
             syncError={sync.error}
+            resetToken={resetToken}
+            onForgotPassword={auth.forgotPassword}
+            onResetPassword={auth.resetPassword}
             onLogin={auth.login}
             onRegister={auth.register}
             onLogout={auth.logout}
@@ -316,6 +329,7 @@ export default function App() {
             onSyncNow={sync.syncNow}
             onClose={() => {
               auth.dismissNotice();
+              setResetToken(null);
               setShowAccount(false);
             }}
           />

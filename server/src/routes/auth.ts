@@ -1,13 +1,17 @@
 import {
   HttpError, json, readJson, route, str, type Ctx,
 } from '../http';
+import { passwordResetEmail } from '../mailer';
 import {
-  MAX_PASSWORD, MIN_PASSWORD, createSession, dummyVerify, hashPassword, normalizeEmail,
+  MAX_PASSWORD, MIN_PASSWORD, createSession, dummyVerify, hashPassword, normalizeEmail, randomToken,
   normalizeInviteCode, sha256, validEmail, verifyPassword,
 } from '../auth';
 import type { RateLimiter } from '../ratelimit';
 
-export function authRoutes(limits: { ip: RateLimiter; login: RateLimiter; register: RateLimiter }) {
+export function authRoutes(limits: {
+  ip: RateLimiter; login: RateLimiter; register: RateLimiter;
+  forgotIp: RateLimiter; forgotEmail: RateLimiter; reset: RateLimiter;
+}) {
   const throttle = (limiter: RateLimiter, key: string) => {
     const wait = limiter.hit(key);
     if (wait > 0) throw new HttpError(429, 'rate_limited', 'Too many attempts. Try again later.', { 'retry-after': String(wait) });
@@ -93,6 +97,68 @@ export function authRoutes(limits: { ip: RateLimiter; login: RateLimiter; regist
       limits.login.reset(`login:${email}`);
       const token = await createSession(ctx.sql, user.id, ctx.config.sessionTtlMs);
       return { token, user: publicUser(user) };
+    }),
+
+
+    // Always answers the same way whether or not the email has an account, so it cannot be
+    // used to find out who is registered. The email is sent after the response.
+    route('POST', '/auth/forgot', {}, async (ctx) => {
+      throttle(limits.forgotIp, `forgot-ip:${ctx.ip}`);
+      const body = await readJson(ctx.req);
+      const email = normalizeEmail(str(body.email, 'email', 3, 254));
+      const sameAnswer = { ok: true };
+      // Over the per-address limit: stay silent rather than reveal anything.
+      if (limits.forgotEmail.hit(`forgot:${email}`) > 0) return sameAnswer;
+
+      const rows = await ctx.sql`select id, name, email from users where lower(email) = ${email}`;
+      const user = rows[0];
+      if (!user) return sameAnswer;
+      if (!ctx.config.appUrl) {
+        console.warn('APP_URL is not set, so password reset links cannot be built.');
+        return sameAnswer;
+      }
+
+      const token = randomToken();
+      const expires = new Date(Date.now() + ctx.config.resetTtlMs);
+      await ctx.sql.begin(async (tx) => {
+        await tx`delete from password_resets where user_id = ${user.id} and used_at is null`;
+        await tx`insert into password_resets (user_id, token_hash, expires_at) values (${user.id}, ${sha256(token)}, ${expires})`;
+      });
+      // The token travels in the URL fragment (#), which browsers never send to any server.
+      const link = `${ctx.config.appUrl}/#reset=${token}`;
+      ctx.background(ctx.mailer.send(passwordResetEmail(user.email, user.name, link, Math.round(ctx.config.resetTtlMs / 60_000))));
+      return sameAnswer;
+    }),
+
+    // Sets a new password with a token from the email. Signs the account out everywhere.
+    route('POST', '/auth/reset', {}, async (ctx) => {
+      throttle(limits.reset, `reset:${ctx.ip}`);
+      const body = await readJson(ctx.req);
+      const token = str(body.token, 'token', 20, 200);
+      const password = body.password;
+      if (typeof password !== 'string' || password.length < MIN_PASSWORD || password.length > MAX_PASSWORD) {
+        throw new HttpError(400, 'invalid_field', `password must be ${MIN_PASSWORD}-${MAX_PASSWORD} characters`);
+      }
+      const invalid = () => new HttpError(400, 'invalid_token', 'This reset link is invalid or has expired. Request a new one.');
+      const tokenHash = sha256(token);
+
+      // Cheap check first so bad tokens never cost a password hash.
+      const found = await ctx.sql`select 1 from password_resets where token_hash = ${tokenHash} and used_at is null and expires_at > now()`;
+      if (found.length === 0) throw invalid();
+
+      const passwordHash = await hashPassword(password);
+      await ctx.sql.begin(async (tx) => {
+        const rows = await tx`
+          update password_resets set used_at = now()
+          where token_hash = ${tokenHash} and used_at is null and expires_at > now()
+          returning user_id`;
+        if (rows.length === 0) throw invalid();
+        const userId = rows[0].user_id;
+        await tx`update users set password_hash = ${passwordHash} where id = ${userId}`;
+        await tx`delete from sessions where user_id = ${userId}`;
+        await tx`delete from password_resets where user_id = ${userId} and used_at is null`;
+      });
+      return { ok: true };
     }),
 
     route('POST', '/auth/logout', { auth: true }, async (ctx) => {
