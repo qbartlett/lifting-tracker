@@ -50,6 +50,10 @@ Personal records are derived from workout history, never stored separately.
 - Coaches get a Coach tab: invite clients (single-use codes), see each client's recent workouts,
   volume and working weights. Read-only; clients can leave at any time from the Account dialog.
 
+### Hosting
+
+`deploy/` has a one-server setup (Postgres + API + Caddy with automatic HTTPS, nightly backups). See `deploy/README.md`.
+
 ### Moving to a backend (done: see `server/`)
 
 1. Implement `AppRepository` (src/storage/repository.ts) against the new backend.

@@ -115,6 +115,8 @@ export function createApiClient(opts: ApiClientOptions) {
       request<{ token: string; user: ApiUser }>('POST', '/auth/register', b, false),
     login: (b: { email: string; password: string }) =>
       request<{ token: string; user: ApiUser }>('POST', '/auth/login', b, false),
+    forgotPassword: (email: string) => request<{ ok: true }>('POST', '/auth/forgot', { email }, false),
+    resetPassword: (token: string, password: string) => request<{ ok: true }>('POST', '/auth/reset', { token, password }, false),
     logout: () => request<{ ok: true }>('POST', '/auth/logout'),
     me: () => request<{ user: ApiUser; coach: { id: string; name: string } | null }>('GET', '/me'),
     leaveCoach: () => request<{ ok: true }>('DELETE', '/me/coach'),

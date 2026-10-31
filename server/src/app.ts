@@ -2,6 +2,7 @@ import type { SQL } from 'bun';
 import type { Config } from './config';
 import { authenticate } from './auth';
 import { HttpError, json, type Ctx, type Route } from './http';
+import { createMailer, type Mailer } from './mailer';
 import { RateLimiter } from './ratelimit';
 import { authRoutes } from './routes/auth';
 import { coachRoutes } from './routes/coach';
@@ -15,14 +16,27 @@ const SECURITY_HEADERS = {
 
 export interface App {
   handle(req: Request, ip?: string): Promise<Response>;
+  /** Resolves when background work (emails) has finished. Used by tests and graceful shutdown. */
+  idle(): Promise<void>;
 }
 
-export function createApp(deps: { sql: SQL; config: Config }): App {
+export function createApp(deps: { sql: SQL; config: Config; mailer?: Mailer }): App {
   const { sql, config } = deps;
+  const mailer = deps.mailer ?? createMailer(config);
+  const pending = new Set<Promise<unknown>>();
+  const background = (task: Promise<unknown>) => {
+    const t: Promise<unknown> = task
+      .catch((e) => console.error('Background task failed:', e instanceof Error ? e.message : e))
+      .finally(() => pending.delete(t));
+    pending.add(t);
+  };
   const limits = {
     ip: new RateLimiter(60, 15 * 60_000),
     login: new RateLimiter(10, 15 * 60_000),
     register: new RateLimiter(10, 60 * 60_000),
+    forgotIp: new RateLimiter(10, 60 * 60_000),
+    forgotEmail: new RateLimiter(3, 60 * 60_000),
+    reset: new RateLimiter(20, 60 * 60_000),
   };
   const routes: Route[] = [...authRoutes(limits), ...coachRoutes(), ...syncRoutes()];
 
@@ -54,7 +68,7 @@ export function createApp(deps: { sql: SQL; config: Config }): App {
 
       const params: Record<string, string> = {};
       r.keys.forEach((k, i) => (params[k] = decodeURIComponent(m[i + 1])));
-      const ctx = { req, url, params, ip, sql, config } as Ctx;
+      const ctx = { req, url, params, ip, sql, config, mailer, background } as Ctx;
 
       if (r.auth) {
         ctx.user = (await authenticate(sql, req)).user;
@@ -67,6 +81,9 @@ export function createApp(deps: { sql: SQL; config: Config }): App {
   }
 
   return {
+    async idle() {
+      while (pending.size) await Promise.all([...pending]);
+    },
     async handle(req, ip = 'unknown') {
       const cors = corsHeaders(req);
       if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...SECURITY_HEADERS, ...cors } });

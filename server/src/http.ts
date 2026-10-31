@@ -1,5 +1,6 @@
 import type { SQL } from 'bun';
 import type { Config } from './config';
+import type { Mailer } from './mailer';
 
 export class HttpError extends Error {
   constructor(public status: number, public code: string, message?: string, public headers: Record<string, string> = {}) {
@@ -21,6 +22,9 @@ export interface Ctx {
   ip: string;
   sql: SQL;
   config: Config;
+  mailer: Mailer;
+  /** Run work after the response (e.g. sending email) without making the caller wait. Errors are logged. */
+  background: (task: Promise<unknown>) => void;
   /** Set for routes registered with auth: true. */
   user: AuthUser;
 }

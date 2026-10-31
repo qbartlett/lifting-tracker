@@ -73,6 +73,14 @@ export function useAuth() {
     [api, adopt]
   );
 
+  const forgotPassword = useCallback(async (email: string) => {
+    await api.forgotPassword(email);
+  }, [api]);
+
+  const resetPassword = useCallback(async (token: string, password: string) => {
+    await api.resetPassword(token, password);
+  }, [api]);
+
   const logout = useCallback(async () => {
     try {
       await api.logout();
@@ -101,7 +109,7 @@ export function useAuth() {
     coach,
     notice,
     dismissNotice: () => setNotice(null),
-    login, register, logout, leaveCoach, deleteAccount, refreshMe,
+    login, register, logout, leaveCoach, deleteAccount, refreshMe, forgotPassword, resetPassword,
   };
 }
 

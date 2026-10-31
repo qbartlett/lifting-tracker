@@ -62,4 +62,14 @@ describe('api client', () => {
     await api.pullClient('a/b c', 0);
     expect(calls[0].url).toContain('/coach/clients/a%2Fb%20c/pull');
   });
+
+  it('forgot/reset password never send a session token', async () => {
+    const { fn, calls } = fakeFetch(() => ({ status: 200, body: { ok: true } }));
+    const api = createApiClient({ baseUrl: 'http://x', getToken: () => 'tok', fetchFn: fn });
+    await api.forgotPassword('a@b.co');
+    await api.resetPassword('t'.repeat(30), 'a brand new password');
+    expect(calls.map((c) => c.url)).toEqual(['http://x/auth/forgot', 'http://x/auth/reset']);
+    for (const c of calls) expect((c.init.headers as any).authorization).toBeUndefined();
+    expect(JSON.parse(calls[1].init.body as string)).toEqual({ token: 't'.repeat(30), password: 'a brand new password' });
+  });
 });

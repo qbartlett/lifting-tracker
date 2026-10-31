@@ -13,6 +13,10 @@ interface AccountModalProps {
   syncStatus: SyncStatus;
   lastSyncedAt: number | null;
   syncError: string | null;
+  /** Token from a password reset link, if the app was opened from one. */
+  resetToken: string | null;
+  onForgotPassword: (email: string) => Promise<void>;
+  onResetPassword: (token: string, password: string) => Promise<void>;
   onLogin: Auth['login'];
   onRegister: Auth['register'];
   onLogout: () => Promise<void>;
@@ -22,7 +26,7 @@ interface AccountModalProps {
   onClose: () => void;
 }
 
-type Mode = 'signin' | 'join' | 'coach';
+type Mode = 'signin' | 'join' | 'coach' | 'forgot' | 'reset';
 
 const field =
   'w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-red-500';
@@ -70,34 +74,52 @@ export const AccountModal: React.FC<AccountModalProps> = (props) => {
           {props.notice && !user && (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">{props.notice}</div>
           )}
-          {user ? <SignedIn {...props} user={user} /> : <SignedOut {...props} />}
+          {user && !props.resetToken ? <SignedIn {...props} user={user} /> : <SignedOut {...props} />}
         </div>
       </div>
     </div>
   );
 };
 
-const SignedOut: React.FC<AccountModalProps> = ({ onLogin, onRegister }) => {
-  const [mode, setMode] = useState<Mode>('signin');
+const SignedOut: React.FC<AccountModalProps> = ({ onLogin, onRegister, onForgotPassword, onResetPassword, resetToken }) => {
+  const [mode, setMode] = useState<Mode>(resetToken ? 'reset' : 'signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+
+  const go = (m: Mode) => { setMode(m); setError(null); setInfo(null); setPassword(''); setConfirm(''); };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (mode !== 'signin' && password.length < 10) {
+    setInfo(null);
+    if ((mode === 'join' || mode === 'coach' || mode === 'reset') && password.length < 10) {
       setError('Choose a password with at least 10 characters.');
+      return;
+    }
+    if (mode === 'reset' && password !== confirm) {
+      setError('The two passwords do not match.');
       return;
     }
     setBusy(true);
     try {
       if (mode === 'signin') await onLogin(email, password);
       else if (mode === 'coach') await onRegister({ email, name, password });
-      else await onRegister({ email, name, password, inviteCode: code });
+      else if (mode === 'join') await onRegister({ email, name, password, inviteCode: code });
+      else if (mode === 'forgot') {
+        await onForgotPassword(email);
+        setInfo('If there is an account for that email, we have sent a link to reset the password. It can take a few minutes. Check your spam folder too.');
+      } else if (mode === 'reset' && resetToken) {
+        await onResetPassword(resetToken, password);
+        go('signin');
+        setInfo('Password changed. Sign in with your new password.');
+        return;
+      }
       haptics.medium();
     } catch (err) {
       setError(errorMessage(err));
@@ -111,23 +133,30 @@ const SignedOut: React.FC<AccountModalProps> = ({ onLogin, onRegister }) => {
     { id: 'join', text: 'Join my coach' },
     { id: 'coach', text: "I'm a coach" },
   ];
+  const showTabs = mode === 'signin' || mode === 'join' || mode === 'coach';
+  const sent = mode === 'forgot' && info !== null;
 
   return (
     <form onSubmit={submit} className="space-y-3.5">
-      <div role="tablist" className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-zinc-950 border border-zinc-800">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={mode === t.id}
-            onClick={() => { setMode(t.id); setError(null); }}
-            className={`py-2 rounded-lg text-[11px] font-bold transition ${mode === t.id ? 'bg-red-600 text-white' : 'text-zinc-400 hover:text-white'}`}
-          >
-            {t.text}
-          </button>
-        ))}
-      </div>
+      {showTabs && (
+        <div role="tablist" className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-zinc-950 border border-zinc-800">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={mode === t.id}
+              onClick={() => go(t.id)}
+              className={`py-2 rounded-lg text-[11px] font-bold transition ${mode === t.id ? 'bg-red-600 text-white' : 'text-zinc-400 hover:text-white'}`}
+            >
+              {t.text}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {mode === 'forgot' && <p className="text-xs text-zinc-300">Enter your email and we will send you a link to choose a new password.</p>}
+      {mode === 'reset' && <p className="text-xs text-zinc-300">Choose a new password for your account.</p>}
 
       {mode === 'join' && (
         <div>
@@ -135,26 +164,63 @@ const SignedOut: React.FC<AccountModalProps> = ({ onLogin, onRegister }) => {
           <input id="acct-code" className={`${field} font-mono tracking-widest uppercase`} value={code} onChange={(e) => setCode(e.target.value)} placeholder="XXXXX-XXXXX" autoComplete="off" required />
         </div>
       )}
-      {mode !== 'signin' && (
+      {(mode === 'join' || mode === 'coach') && (
         <div>
           <label htmlFor="acct-name" className={label}>Your name</label>
           <input id="acct-name" className={field} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required maxLength={100} />
         </div>
       )}
-      <div>
-        <label htmlFor="acct-email" className={label}>Email</label>
-        <input id="acct-email" type="email" className={field} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
-      </div>
-      <div>
-        <label htmlFor="acct-pw" className={label}>Password{mode !== 'signin' && ' (10+ characters)'}</label>
-        <input id="acct-pw" type="password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} required />
-      </div>
+      {mode !== 'reset' && !sent && (
+        <div>
+          <label htmlFor="acct-email" className={label}>Email</label>
+          <input id="acct-email" type="email" className={field} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
+        </div>
+      )}
+      {mode !== 'forgot' && (
+        <div>
+          <label htmlFor="acct-pw" className={label}>{mode === 'reset' ? 'New password' : 'Password'}{mode !== 'signin' && ' (10+ characters)'}</label>
+          <input id="acct-pw" type="password" className={field} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} required />
+        </div>
+      )}
+      {mode === 'reset' && (
+        <div>
+          <label htmlFor="acct-pw2" className={label}>Repeat new password</label>
+          <input id="acct-pw2" type="password" className={field} value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required />
+        </div>
+      )}
 
-      {error && <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">{error}</div>}
+      {info && <div role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">{info}</div>}
+      {error && (
+        <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+          {error}
+          {mode === 'reset' && /link/i.test(error) && (
+            <button type="button" onClick={() => go('forgot')} className="block mt-1.5 font-bold underline">Send me a new link</button>
+          )}
+        </div>
+      )}
 
-      <button type="submit" disabled={busy} className={primary}>
-        {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : mode === 'join' ? 'Join my coach' : 'Create coach account'}
-      </button>
+      {!sent && (
+        <button type="submit" disabled={busy} className={primary}>
+          {busy
+            ? 'Please wait…'
+            : mode === 'signin' ? 'Sign in'
+            : mode === 'join' ? 'Join my coach'
+            : mode === 'coach' ? 'Create coach account'
+            : mode === 'forgot' ? 'Send reset link'
+            : 'Change password'}
+        </button>
+      )}
+
+      {mode === 'signin' && (
+        <button type="button" onClick={() => go('forgot')} className="w-full text-center text-[11px] font-bold text-zinc-400 hover:text-white transition">
+          Forgot your password?
+        </button>
+      )}
+      {(mode === 'forgot' || mode === 'reset') && (
+        <button type="button" onClick={() => go('signin')} className="w-full text-center text-[11px] font-bold text-zinc-400 hover:text-white transition">
+          Back to sign in
+        </button>
+      )}
 
       {mode === 'join' && (
         <p className="text-[11px] text-zinc-500 flex gap-1.5">
@@ -162,7 +228,7 @@ const SignedOut: React.FC<AccountModalProps> = ({ onLogin, onRegister }) => {
           Your coach will be able to see your workouts, routines and progress. They cannot change your data, and you can leave at any time.
         </p>
       )}
-      <p className="text-[11px] text-zinc-500">The app works without an account. Signing in adds cloud sync across your devices.</p>
+      {showTabs && <p className="text-[11px] text-zinc-500">The app works without an account. Signing in adds cloud sync across your devices.</p>}
     </form>
   );
 };

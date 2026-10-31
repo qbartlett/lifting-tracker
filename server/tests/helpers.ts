@@ -2,18 +2,35 @@ import { SQL } from 'bun';
 import { createApp, type App } from '../src/app';
 import { loadConfig } from '../src/config';
 import { migrate } from '../src/migrate';
+import type { Mail, Mailer } from '../src/mailer';
 
 export const TEST_DB = process.env.TEST_DATABASE_URL ?? 'postgres://postgres@localhost:54329/irontrack_test';
 
 // One pooled connection set for the whole test run; the schema is rebuilt per test.
 const sql = new SQL(TEST_DB, { max: 10 });
 
-export async function setup(): Promise<{ sql: SQL; app: App; api: Api }> {
+export class TestMailer implements Mailer {
+  sent: Mail[] = [];
+  fail = false;
+  async send(mail: Mail) {
+    if (this.fail) throw new Error('mail provider down');
+    this.sent.push(mail);
+  }
+  /** The reset token from the most recent email. */
+  lastToken(): string {
+    const m = /#reset=([A-Za-z0-9_-]+)/.exec(this.sent[this.sent.length - 1]?.text ?? '');
+    if (!m) throw new Error('no reset link in last email');
+    return m[1];
+  }
+}
+
+export async function setup(): Promise<{ sql: SQL; app: App; api: Api; mailer: TestMailer }> {
   await sql.unsafe('drop schema public cascade; create schema public;');
   await migrate(sql);
-  const config = loadConfig({ DATABASE_URL: TEST_DB, CORS_ORIGINS: 'https://app.example.com' });
-  const app = createApp({ sql, config });
-  return { sql, app, api: makeApi(app) };
+  const config = loadConfig({ DATABASE_URL: TEST_DB, CORS_ORIGINS: 'https://app.example.com', APP_URL: 'https://app.example.com' });
+  const mailer = new TestMailer();
+  const app = createApp({ sql, config, mailer });
+  return { sql, app, api: makeApi(app), mailer };
 }
 
 export interface Reply<T = any> { status: number; body: T; headers: Headers }

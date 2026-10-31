@@ -1,0 +1,35 @@
+# {$DOMAIN} is your site's address, e.g. app.example.com. Caddy gets and renews the HTTPS certificate itself.
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# Report-only for now: it logs problems in the browser console without breaking anything.
+		# Once you have used the app for a while with no warnings, rename to Content-Security-Policy.
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	}
+
+	# /api/auth/login -> server receives /auth/login
+	handle_path /api/* {
+		reverse_proxy api:8787
+	}
+
+	handle {
+		root * /srv
+
+		# Hashed files never change, so browsers can keep them forever.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+
+		# The entry page and service worker must always be re-checked, or updates never reach users.
+		@fresh path / /index.html /sw.js /registerSW.js /manifest.webmanifest /workbox-*.js
+		header @fresh Cache-Control "no-cache"
+
+		try_files {path} /index.html
+		file_server
+	}
+}
