@@ -65,7 +65,7 @@ Practise a restore on a spare machine once, so you know it works.
 
 - `docker compose ps`: all three services should be running (api "healthy").
 - `docker compose logs api`: server messages. A warning about SMTP means reset emails are not being sent.
-- `curl https://app.example.com/api/health` should answer `ok`.
+- `curl https://app.example.com/api/health` should answer `{"ok":true}`.
 - Certificate not issued: DNS is not pointing at the server yet, or ports 80/443 are blocked by a firewall.
 - Reset email not arriving: check your provider's activity log, then the spam folder, then that `MAIL_FROM` is on the verified domain.
 - Security: keep the server updated (`apt upgrade`), allow only ports 22, 80 and 443 (`ufw allow 22,80,443/tcp && ufw allow 443/udp && ufw enable`), and use SSH keys instead of a password.
