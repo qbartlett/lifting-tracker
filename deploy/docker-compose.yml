@@ -1,0 +1,59 @@
+# Production stack: Postgres + API + web (Caddy). Run from this folder:  docker compose up -d --build
+name: irontrack
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: irontrack
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: irontrack
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U irontrack"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: ../server
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://irontrack:${POSTGRES_PASSWORD}@db:5432/irontrack
+      APP_URL: https://${DOMAIN:?set DOMAIN in .env}
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      # Caddy is the only thing that can reach the API, so its forwarded client address is trustworthy.
+      TRUST_PROXY: "1"
+      NODE_ENV: production
+    # No published ports: only the web container can reach the API.
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      retries: 5
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  dbdata:
+  caddy_data:
+  caddy_config:

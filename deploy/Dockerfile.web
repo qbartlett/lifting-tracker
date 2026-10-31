@@ -1,0 +1,14 @@
+# Builds the web app, then serves it with Caddy (automatic HTTPS) and proxies /api to the server.
+# Build context is the repository root:  docker compose -f deploy/docker-compose.yml build
+FROM oven/bun:1.4 AS build
+WORKDIR /src
+COPY package.json ./
+RUN bun install
+COPY . .
+# Same domain for app and API, so no CORS is needed.
+ENV VITE_API_URL=/api
+RUN bun run build
+
+FROM caddy:2-alpine
+COPY deploy/Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /src/dist /srv
