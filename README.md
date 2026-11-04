@@ -49,6 +49,10 @@ Personal records are derived from workout history, never stored separately.
   (it lives on the other account) so data can never leak between accounts.
 - Coaches get a Coach tab: invite clients (single-use codes), see each client's recent workouts,
   volume and working weights. Read-only; clients can leave at any time from the Account dialog.
+- Coach-assigned programs: a coach builds a weekly plan (e.g. Mon Push, Wed Pull) for N weeks, then assigns it to a
+  client with a start date. The client gets a Program tab, can start any session from it (works offline from the last
+  saved copy) but cannot edit it. Finished sessions are tagged on the workout (`programRef`), so the coach sees
+  done / missed per session. Ending the link with the coach ends the plan.
 
 ### Hosting
 

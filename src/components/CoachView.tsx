@@ -6,18 +6,23 @@ import type { ApiClient, ClientSummary as ClientRow, InviteSummary } from '../ap
 import { errorMessage } from '../state/useAuth';
 import { applyRemoteChanges, type Snapshot } from '../sync/docs';
 import { describeLastWorkout, summarizeTraining } from '../domain/coachStats';
-import type { CompletedWorkout, WeightUnit } from '../types/lifting';
+import type { CompletedWorkout, Exercise, RoutineTemplate, WeightUnit } from '../types/lifting';
+import { ClientPlan, ProgramsSection } from './CoachPrograms';
 import { haptics } from '../utils/haptics';
 
 interface CoachViewProps {
   api: ApiClient;
   unit: WeightUnit;
+  routines: RoutineTemplate[];
+  exercises: Exercise[];
+  onAddCustomExercise: (exercise: Exercise) => void;
 }
 
 const card = 'rounded-2xl border border-zinc-800 bg-zinc-900';
 const errorBox = 'rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300';
 
-export const CoachView: React.FC<CoachViewProps> = ({ api, unit }) => {
+export const CoachView: React.FC<CoachViewProps> = ({ api, unit, routines, exercises, onAddCustomExercise }) => {
+  const [section, setSection] = useState<'clients' | 'programs'>('clients');
   const [clients, setClients] = useState<ClientRow[] | null>(null);
   const [invites, setInvites] = useState<InviteSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -92,8 +97,29 @@ export const CoachView: React.FC<CoachViewProps> = ({ api, unit }) => {
   }
 
   const now = Date.now();
+  const segment = (id: 'clients' | 'programs', text: string) => (
+    <button
+      key={id}
+      onClick={() => { haptics.light(); setSection(id); }}
+      aria-pressed={section === id}
+      className={`flex-1 py-2 rounded-xl text-xs font-black transition ${section === id ? 'bg-red-600 text-white' : 'text-zinc-400 hover:text-white'}`}
+    >
+      {text}
+    </button>
+  );
+
+  if (section === 'programs') {
+    return (
+      <div className="pt-4 pb-32 space-y-4">
+        <div className="flex gap-1 p-1 rounded-2xl bg-zinc-900 border border-zinc-800">{segment('clients', 'Clients')}{segment('programs', 'Programs')}</div>
+        <ProgramsSection api={api} routines={routines} exercises={exercises} onAddCustomExercise={onAddCustomExercise} />
+      </div>
+    );
+  }
+
   return (
     <div className="pt-4 pb-32 space-y-4">
+      <div className="flex gap-1 p-1 rounded-2xl bg-zinc-900 border border-zinc-800">{segment('clients', 'Clients')}{segment('programs', 'Programs')}</div>
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-black text-white tracking-tight flex items-center gap-2">
           <Users className="w-5 h-5 text-red-500" /> Clients
@@ -265,6 +291,8 @@ const ClientDetail: React.FC<{ api: ApiClient; client: ClientRow; unit: WeightUn
             ))}
           </div>
           <div className="text-xs text-zinc-400">{describeLastWorkout(summary.lastWorkoutAt, now)}</div>
+
+          <ClientPlan api={api} clientId={client.id} clientName={client.name} />
 
           {lifts.length > 0 && (
             <div className={`${card} p-3.5`}>

@@ -6,6 +6,7 @@ import { createMailer, type Mailer } from './mailer';
 import { RateLimiter } from './ratelimit';
 import { authRoutes } from './routes/auth';
 import { coachRoutes } from './routes/coach';
+import { programRoutes } from './routes/programs';
 import { syncRoutes } from './routes/sync';
 
 const SECURITY_HEADERS = {
@@ -38,7 +39,7 @@ export function createApp(deps: { sql: SQL; config: Config; mailer?: Mailer }): 
     forgotEmail: new RateLimiter(3, 60 * 60_000),
     reset: new RateLimiter(20, 60 * 60_000),
   };
-  const routes: Route[] = [...authRoutes(limits), ...coachRoutes(), ...syncRoutes()];
+  const routes: Route[] = [...authRoutes(limits), ...coachRoutes(), ...programRoutes(), ...syncRoutes()];
 
   function corsHeaders(req: Request): Record<string, string> {
     const origin = req.headers.get('origin');

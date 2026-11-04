@@ -6,15 +6,18 @@ import type {
   ActiveWorkout,
   CompletedWorkout,
   Exercise,
+  ProgramRef,
   RoutineTemplate,
   UserSettings,
 } from '../types/lifting';
+import type { ProgramSession } from '../types/program';
 import { applyWorkoutToRecords, computePersonalRecords } from '../domain/records';
 import { applyProgression } from '../domain/progression';
 import { parseSpreadsheetCSV } from '../domain/csvImport';
 import {
   addExerciseToWorkout,
   createEmptyWorkout,
+  createProgramWorkout,
   createRoutineWorkout,
 } from '../domain/workoutFactory';
 
@@ -88,6 +91,13 @@ export function useAppData(repo: AppRepository) {
   const startRoutineWorkout = useCallback(
     (routine: RoutineTemplate) => {
       setActiveWorkout(createRoutineWorkout(routine, exercises, progression, Date.now()));
+    },
+    [exercises, progression, setActiveWorkout]
+  );
+
+  const startProgramWorkout = useCallback(
+    (session: ProgramSession, ref: ProgramRef) => {
+      setActiveWorkout(createProgramWorkout(session, ref, exercises, progression, Date.now()));
     },
     [exercises, progression, setActiveWorkout]
   );
@@ -226,6 +236,7 @@ export function useAppData(repo: AppRepository) {
     setActiveWorkout,
     startEmptyWorkout,
     startRoutineWorkout,
+    startProgramWorkout,
     addExerciseToActiveWorkout,
     discardWorkout,
     completeWorkout,

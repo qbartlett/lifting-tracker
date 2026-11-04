@@ -54,11 +54,19 @@ export interface WorkoutExercise {
   supersetWithId?: string; // ID of another exercise if paired in superset
 }
 
+/** Marks a workout as one session of a coach-assigned program. `week` is 0-based. */
+export interface ProgramRef {
+  assignmentId: string;
+  sessionId: string;
+  week: number;
+}
+
 export interface ActiveWorkout {
   id: string;
   name: string;
   startTime: number;
   routineId?: string;
+  programRef?: ProgramRef;
   exercises: WorkoutExercise[];
   notes?: string;
 }
@@ -74,6 +82,7 @@ export interface CompletedWorkout {
   totalSets: number;
   notes?: string;
   prCount?: number;
+  programRef?: ProgramRef;
 }
 
 export interface RoutineTemplate {

@@ -52,6 +52,11 @@ Errors look like `{"error": {"code": "...", "message": "..."}}`.
 | POST | `/auth/logout` | user | Invalidates the token |
 | POST | `/auth/forgot` | anyone | `{email}` emails a reset link. Always answers the same, so it cannot be used to find out who has an account. Rate limited |
 | POST | `/auth/reset` | anyone | `{token, password}` sets a new password and signs out every device. Links work once |
+| GET | `/coach/programs`, `/coach/programs/:id` | coach | The coach's own programs |
+| POST / PUT / DELETE | `/coach/programs`, `/coach/programs/:id` | coach | `{name, notes, weeks 1-52, sessions[{id, day 0-6 (Mon=0), name, exercises[{exerciseId, name, category, equipment, sets, reps, restSeconds, notes}]}]}`. Fully validated. Delete is refused (409) while a client is still on it |
+| POST | `/coach/programs/:id/assign` | coach | `{clientId, startDate}` gives it to a linked client, replacing their current plan. Week 1 is the Monday-Sunday week containing the start date |
+| GET / DELETE | `/coach/clients/:id/program` | coach | The client's plan plus the workouts they logged against it (`programRef` on a workout), or end the plan |
+| GET | `/me/program` | client | The client's current plan, or `{assignment: null}` |
 | GET | `/me` | user | `{user, coach}` (`coach` is null unless a linked client) |
 | DELETE | `/me/coach` | client | Leave your coach |
 | DELETE | `/me` | user | `{password}`. Deletes the account and all its data |
@@ -79,4 +84,4 @@ A push entry rejected with `reason: "stale"` means the server has a newer versio
 
 ## Not built yet
 
-Email verification, coach-assigned programs, billing, admin tooling.
+Email verification, billing, admin tooling.

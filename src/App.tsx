@@ -3,6 +3,7 @@ import { repository } from './storage';
 import { useAppData } from './state/useAppData';
 import { useAuth } from './state/useAuth';
 import { useSync } from './state/useSync';
+import { useProgram } from './state/useProgram';
 import { defaultApiBaseUrl } from './api/client';
 import { clearResetFragment, readResetToken } from './auth/resetLink';
 import { RoutineTemplate, Exercise, CompletedWorkout } from './types/lifting';
@@ -23,6 +24,8 @@ import { MobileTestModal } from './components/MobileTestModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { AccountModal } from './components/AccountModal';
 import { CoachView } from './components/CoachView';
+import { ProgramView } from './components/ProgramView';
+import type { ProgramSession } from './types/program';
 import { haptics } from './utils/haptics';
 import { wakeLockService } from './utils/wakeLock';
 import { Play, Flame, Disc, Timer, QrCode } from 'lucide-react';
@@ -35,6 +38,8 @@ export default function App() {
   const auth = useAuth();
   const sync = useSync(data, auth);
   const isCoach = accountsEnabled && auth.user?.role === 'coach';
+  const program = useProgram(auth.api, accountsEnabled ? auth.user : null, auth.coach?.id ?? null);
+  const hasProgram = accountsEnabled && auth.user?.role === 'client' && !!program.assignment;
   const { settings, exercises, routines, history, progression, personalRecords, activeWorkout } = data;
 
   const [currentTab, setCurrentTab] = useState<TabType>(() => (activeWorkout ? 'workout' : 'routines'));
@@ -70,7 +75,8 @@ export default function App() {
   // Leaving the coach role (signing out) while on the Coach tab would leave a blank screen.
   useEffect(() => {
     if (currentTab === 'coach' && !isCoach) setCurrentTab('routines');
-  }, [currentTab, isCoach]);
+    if (currentTab === 'program' && !hasProgram) setCurrentTab('routines');
+  }, [currentTab, isCoach, hasProgram]);
 
   useEffect(() => {
     if (resetToken) {
@@ -93,6 +99,14 @@ export default function App() {
   const startRoutineWorkout = (routine: RoutineTemplate) => {
     haptics.medium();
     data.startRoutineWorkout(routine);
+    setCurrentTab('workout');
+  };
+
+  const startProgramSession = (session: ProgramSession, week: number) => {
+    if (!program.assignment) return;
+    if (activeWorkout && !confirm('You have a workout in progress. Replace it with this session? Recorded sets will not be saved.')) return;
+    haptics.medium();
+    data.startProgramWorkout(session, { assignmentId: program.assignment.id, sessionId: session.id, week });
     setCurrentTab('workout');
   };
 
@@ -271,8 +285,25 @@ export default function App() {
             />
           )}
 
+          {currentTab === 'program' && hasProgram && program.assignment && (
+            <ProgramView
+              assignment={program.assignment}
+              history={history}
+              loading={program.loading}
+              error={program.error}
+              onRefresh={() => void program.refresh()}
+              onStartSession={startProgramSession}
+            />
+          )}
+
           {currentTab === 'coach' && isCoach && (
-            <CoachView api={auth.api} unit={settings.weightUnit} />
+            <CoachView
+              api={auth.api}
+              unit={settings.weightUnit}
+              routines={routines}
+              exercises={exercises}
+              onAddCustomExercise={data.addCustomExercise}
+            />
           )}
 
           {currentTab === 'history' && (
@@ -304,6 +335,7 @@ export default function App() {
           activeTab={currentTab}
           hasActiveWorkout={!!activeWorkout}
           showCoach={isCoach}
+          showProgram={hasProgram}
           onTabChange={(tab) => setCurrentTab(tab)}
         />
 

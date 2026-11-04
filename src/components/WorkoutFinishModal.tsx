@@ -68,6 +68,7 @@ export const WorkoutFinishModal: React.FC<WorkoutFinishModalProps> = ({
       totalVolume,
       totalSets: completedSets,
       notes: notes.trim() || undefined,
+      ...(workout.programRef ? { programRef: workout.programRef } : {}),
     };
     onSave(completed);
   };
