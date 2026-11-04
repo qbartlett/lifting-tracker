@@ -10,7 +10,13 @@ const applied = await migrate(sql);
 if (applied.length) console.log(`Applied migrations: ${applied.join(', ')}`);
 
 const app = createApp({ sql, config });
-if (!config.smtpUrl || !config.mailFrom) console.warn('Email is not configured (SMTP_URL / MAIL_FROM): password reset emails will not be sent.');
+if (!config.smtpUrl || !config.mailFrom) {
+  console.warn(
+    process.env.NODE_ENV === 'production'
+      ? 'Email is not configured (SMTP_URL / MAIL_FROM): password reset emails will NOT be sent.'
+      : 'Email is not configured (SMTP_URL / MAIL_FROM): emails will be printed here instead of sent. That is fine for development.',
+  );
+}
 if (!config.appUrl) console.warn('APP_URL is not set: password reset links cannot be built.');
 
 const server = Bun.serve({
