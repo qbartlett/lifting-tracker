@@ -1,14 +1,16 @@
 import React from 'react';
-import { Dumbbell, Layers, BookOpen, History, Users } from 'lucide-react';
+import { Dumbbell, Layers, BookOpen, History, Users, CalendarDays } from 'lucide-react';
 import { haptics } from '../utils/haptics';
 
-export type TabType = 'workout' | 'routines' | 'exercises' | 'history' | 'coach';
+export type TabType = 'workout' | 'routines' | 'exercises' | 'history' | 'coach' | 'program';
 
 interface BottomNavProps {
   activeTab: TabType;
   hasActiveWorkout: boolean;
   /** Show the Coach tab (signed-in coaches only). */
   showCoach?: boolean;
+  /** Show the Program tab (clients with a coach-assigned plan). */
+  showProgram?: boolean;
   onTabChange: (tab: TabType) => void;
 }
 
@@ -16,6 +18,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   activeTab,
   hasActiveWorkout,
   showCoach = false,
+  showProgram = false,
   onTabChange,
 }) => {
   const tabs = [
@@ -40,6 +43,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       label: 'History',
       icon: History,
     },
+    ...(showProgram ? [{ id: 'program' as TabType, label: 'Program', icon: CalendarDays }] : []),
     ...(showCoach ? [{ id: 'coach' as TabType, label: 'Coach', icon: Users }] : []),
   ];
 

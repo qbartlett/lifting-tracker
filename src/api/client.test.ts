@@ -72,4 +72,24 @@ describe('api client', () => {
     for (const c of calls) expect((c.init.headers as any).authorization).toBeUndefined();
     expect(JSON.parse(calls[1].init.body as string)).toEqual({ token: 't'.repeat(30), password: 'a brand new password' });
   });
+
+  it('talks to the program endpoints', async () => {
+    const { fn, calls } = fakeFetch(() => ({ status: 200, body: { assignment: null, completions: [] } }));
+    const api = createApiClient({ baseUrl: '/api', getToken: () => 't', fetchFn: fn });
+    await api.myProgram();
+    await api.clientProgram('c/1');
+    await api.assignProgram('p1', 'c1', '2026-11-09');
+    await api.updateProgram('p1', { id: 'p1', name: 'N', notes: null, weeks: 4, sessions: [] });
+    await api.endClientProgram('c1');
+    expect(calls.map((c) => `${c.init.method} ${c.url}`)).toEqual([
+      'GET /api/me/program',
+      'GET /api/coach/clients/c%2F1/program',
+      'POST /api/coach/programs/p1/assign',
+      'PUT /api/coach/programs/p1',
+      'DELETE /api/coach/clients/c1/program',
+    ]);
+    expect(JSON.parse(calls[2].init.body as string)).toEqual({ clientId: 'c1', startDate: '2026-11-09' });
+    // The id is never sent in the body; the server takes it from the URL.
+    expect(Object.keys(JSON.parse(calls[3].init.body as string)).sort()).toEqual(['name', 'notes', 'sessions', 'weeks']);
+  });
 });

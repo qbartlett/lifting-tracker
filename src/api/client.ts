@@ -1,3 +1,5 @@
+import type { Program, ProgramAssignment, ProgramCompletion, ProgramDraft } from '../types/program';
+
 export type Role = 'coach' | 'client';
 
 export interface ApiUser {
@@ -53,6 +55,13 @@ export interface InviteSummary {
   expiresAt: string;
   usedAt: string | null;
   status: 'pending' | 'used' | 'expired';
+}
+
+export interface ProgramSummary extends Program {
+  createdAt: string;
+  updatedAt: string;
+  /** Clients currently on this program. */
+  activeAssignments: number;
 }
 
 export class ApiError extends Error {
@@ -131,9 +140,25 @@ export function createApiClient(opts: ApiClientOptions) {
     pullClient: (id: string, since: number, limit = 500) =>
       request<PullResult>('GET', `/coach/clients/${encodeURIComponent(id)}/pull${q({ since, limit })}`),
 
+    listPrograms: () => request<{ programs: ProgramSummary[] }>('GET', '/coach/programs'),
+    createProgram: (p: ProgramDraft) => request<Program>('POST', '/coach/programs', programBody(p)),
+    updateProgram: (id: string, p: ProgramDraft) => request<Program>('PUT', `/coach/programs/${encodeURIComponent(id)}`, programBody(p)),
+    deleteProgram: (id: string) => request<{ ok: true }>('DELETE', `/coach/programs/${encodeURIComponent(id)}`),
+    assignProgram: (id: string, clientId: string, startDate: string) =>
+      request<{ id: string; startDate: string }>('POST', `/coach/programs/${encodeURIComponent(id)}/assign`, { clientId, startDate }),
+    clientProgram: (clientId: string) =>
+      request<{ assignment: ProgramAssignment | null; completions: ProgramCompletion[] }>('GET', `/coach/clients/${encodeURIComponent(clientId)}/program`),
+    endClientProgram: (clientId: string) => request<{ ok: true }>('DELETE', `/coach/clients/${encodeURIComponent(clientId)}/program`),
+    myProgram: () => request<{ assignment: ProgramAssignment | null }>('GET', '/me/program'),
+
     push: (changes: PushChange[]) => request<PushResult>('POST', '/sync/push', { changes }),
     pull: (since: number, limit = 500) => request<PullResult>('GET', `/sync/pull${q({ since, limit })}`),
   };
+}
+
+/** Only the fields the server accepts. */
+function programBody(p: ProgramDraft) {
+  return { name: p.name, notes: p.notes, weeks: p.weeks, sessions: p.sessions };
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;

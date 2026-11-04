@@ -62,6 +62,7 @@ export function coachRoutes() {
 
     route('DELETE', '/coach/clients/:id', { auth: true, role: 'coach' }, async (ctx) => {
       await requireClient(ctx, ctx.params.id);
+      await ctx.sql`update program_assignments set ended_at = now() where coach_id = ${ctx.user.id} and client_id = ${ctx.params.id} and ended_at is null`;
       await ctx.sql`delete from coach_clients where coach_id = ${ctx.user.id} and client_id = ${ctx.params.id}`;
       return { ok: true };
     }),

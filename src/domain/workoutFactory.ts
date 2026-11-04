@@ -1,10 +1,14 @@
 import type {
   ActiveWorkout,
+  EquipmentType,
   Exercise,
+  MuscleGroup,
+  ProgramRef,
   ProgressionConfigs,
   RoutineTemplate,
   WorkoutExercise,
 } from '../types/lifting';
+import type { ProgramSession } from '../types/program';
 
 const FALLBACK_ROUTINE_WEIGHT = 135;
 const FALLBACK_ADHOC_WEIGHT = 95;
@@ -43,6 +47,49 @@ export function createRoutineWorkout(
           type: 'normal' as const,
           weight,
           reps: item.targetReps,
+          completed: false,
+        })),
+      };
+    }),
+  };
+}
+
+/**
+ * Starts one session of a coach's program. The coach's snapshot supplies the exercise
+ * details, so it works even if this device does not have that exercise. Weights are the
+ * client's own (progression or a default), because the plan prescribes sets and reps only.
+ */
+export function createProgramWorkout(
+  session: ProgramSession,
+  ref: ProgramRef,
+  exercises: Exercise[],
+  configs: ProgressionConfigs,
+  now: number
+): ActiveWorkout {
+  return {
+    id: `workout-${now}`,
+    name: session.name,
+    startTime: now,
+    programRef: ref,
+    exercises: session.exercises.map((item, idx) => {
+      const ex: Exercise = exercises.find((e) => e.id === item.exerciseId) ?? {
+        id: item.exerciseId,
+        name: item.name,
+        category: item.category as MuscleGroup,
+        equipment: item.equipment as EquipmentType,
+      };
+      const weight = configs[item.exerciseId]?.currentWeight || FALLBACK_ROUTINE_WEIGHT;
+      return {
+        id: `we-${now}-${idx}`,
+        exerciseId: item.exerciseId,
+        exercise: ex,
+        notes: item.notes ?? undefined,
+        restTimerSeconds: item.restSeconds || 120,
+        sets: Array.from({ length: item.sets }, (_, sIdx) => ({
+          id: `set-${now}-${idx}-${sIdx}`,
+          type: 'normal' as const,
+          weight,
+          reps: item.reps,
           completed: false,
         })),
       };
