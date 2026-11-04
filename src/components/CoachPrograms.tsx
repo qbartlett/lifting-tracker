@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, ClipboardList, Copy, Pencil, Plus, Trash2, X } from 'lucide-react';
-import { ApiError, type ApiClient, type ProgramSummary } from '../api/client';
+import { ApiError, type ApiClient, type ClientSummary, type ProgramSummary } from '../api/client';
 import { errorMessage } from '../state/useAuth';
 import type { Exercise, RoutineTemplate } from '../types/lifting';
 import type { ProgramAssignment, ProgramCompletion, ProgramDraft, ProgramSession } from '../types/program';
@@ -26,6 +26,8 @@ export const ProgramsSection: React.FC<{ api: ApiClient } & LibraryProps> = ({ a
   const [programs, setPrograms] = useState<ProgramSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<ProgramDraft | null>(null);
+  const [offer, setOffer] = useState<{ id: string; name: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -68,6 +70,7 @@ export const ProgramsSection: React.FC<{ api: ApiClient } & LibraryProps> = ({ a
         <Plus className="w-4 h-4" /> New program
       </button>
 
+      {notice && <div role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">{notice}</div>}
       {error && <div role="alert" className={errorBox}>{error}</div>}
       {programs === null && <div className="text-xs text-zinc-500 text-center py-6">Loading…</div>}
       {programs?.length === 0 && !error && (
@@ -94,6 +97,15 @@ export const ProgramsSection: React.FC<{ api: ApiClient } & LibraryProps> = ({ a
         </div>
       ))}
 
+      {offer && (
+        <AssignToClientDialog
+          api={api}
+          program={offer}
+          onClose={() => setOffer(null)}
+          onDone={(clientName) => { setOffer(null); setNotice(`"${offer.name}" assigned to ${clientName}.`); void load(); }}
+        />
+      )}
+
       {editing && (
         <ProgramBuilder
           api={api}
@@ -102,7 +114,13 @@ export const ProgramsSection: React.FC<{ api: ApiClient } & LibraryProps> = ({ a
           exercises={exercises}
           onAddCustomExercise={onAddCustomExercise}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); void load(); }}
+          onSaved={(saved) => {
+            setEditing(null);
+            setNotice(null);
+            // A new program does nothing until it is given to someone, so offer to do that now.
+            if (saved.isNew) setOffer({ id: saved.id, name: saved.name });
+            void load();
+          }}
         />
       )}
     </div>
@@ -137,7 +155,7 @@ const ProgramBuilder: React.FC<{
   api: ApiClient;
   initial: ProgramDraft;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (saved: { id: string; name: string; isNew: boolean }) => void;
 } & LibraryProps> = ({ api, initial, routines, exercises, onAddCustomExercise, onClose, onSaved }) => {
   const [draft, setDraft] = useState<ProgramDraft>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -161,10 +179,9 @@ const ProgramBuilder: React.FC<{
     setError(null);
     try {
       const body = cleanDraft(draft);
-      if (draft.id) await api.updateProgram(draft.id, body);
-      else await api.createProgram(body);
+      const saved = draft.id ? await api.updateProgram(draft.id, body) : await api.createProgram(body);
       haptics.medium();
-      onSaved();
+      onSaved({ id: saved.id, name: saved.name, isNew: !draft.id });
     } catch (e) {
       setError(errorMessage(e));
       setSaving(false);
@@ -479,6 +496,75 @@ const AssignDialog: React.FC<{ api: ApiClient; clientId: string; clientName: str
         <button type="submit" disabled={busy || !programId || !start} className="w-full py-3 rounded-2xl bg-red-600 text-white text-sm font-black hover:bg-red-500 transition disabled:opacity-50">
           {busy ? 'Assigning…' : replacing ? 'Replace plan' : 'Assign program'}
         </button>
+      </form>
+    </div>
+  );
+};
+
+/** Offered right after a new program is saved: pick a client and a start date. */
+const AssignToClientDialog: React.FC<{
+  api: ApiClient;
+  program: { id: string; name: string };
+  onClose: () => void;
+  onDone: (clientName: string) => void;
+}> = ({ api, program, onClose, onDone }) => {
+  const [clients, setClients] = useState<ClientSummary[] | null>(null);
+  const [clientId, setClientId] = useState('');
+  const [start, setStart] = useState(() => localDateString(Date.now()));
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.listClients().then((r) => { setClients(r.clients); setClientId(r.clients[0]?.id ?? ''); }).catch((e) => { setError(errorMessage(e)); setClients([]); });
+  }, [api]);
+
+  const go = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const client = clients?.find((c) => c.id === clientId);
+    if (!client) return;
+    setBusy(true);
+    try {
+      await api.assignProgram(program.id, client.id, start);
+      haptics.medium();
+      onDone(client.name);
+    } catch (err) {
+      setError(errorMessage(err));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-label="Assign this program">
+      <form onSubmit={go} className="w-full max-w-sm rounded-3xl border border-zinc-800 bg-zinc-900 p-5 space-y-3">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-base font-black text-white">Program saved</h3>
+            <p className="text-xs text-zinc-400 mt-0.5">"{program.name}" is not visible to anyone until you assign it. Give it to a client now?</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Not now" className="p-1.5 text-zinc-400 hover:text-white shrink-0"><X className="w-5 h-5" /></button>
+        </div>
+        {clients === null && <div className="text-xs text-zinc-500">Loading…</div>}
+        {clients?.length === 0 && !error && (
+          <div className="text-xs text-zinc-400">You have no clients yet. Invite one from the Clients section, then open their page and choose Assign program.</div>
+        )}
+        {clients && clients.length > 0 && (
+          <>
+            <label htmlFor="nudge-client" className="block text-[11px] font-bold text-zinc-400">Client</label>
+            <select id="nudge-client" value={clientId} onChange={(e) => setClientId(e.target.value)} className={input}>
+              {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <label htmlFor="nudge-start" className="block text-[11px] font-bold text-zinc-400">Start date</label>
+            <input id="nudge-start" type="date" required value={start} onChange={(e) => setStart(e.target.value)} className={input} />
+            <p className="text-[11px] text-zinc-500">If they already have a plan, this replaces it.</p>
+          </>
+        )}
+        {error && <div role="alert" className={errorBox}>{error}</div>}
+        <div className="flex gap-2">
+          <button type="button" onClick={onClose} className="px-4 py-3 rounded-2xl border border-zinc-700 text-sm font-bold text-zinc-300 hover:text-white transition">Not now</button>
+          <button type="submit" disabled={busy || !clientId} className="flex-1 py-3 rounded-2xl bg-red-600 text-white text-sm font-black hover:bg-red-500 transition disabled:opacity-50">
+            {busy ? 'Assigning…' : 'Assign'}
+          </button>
+        </div>
       </form>
     </div>
   );
