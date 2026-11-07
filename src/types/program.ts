@@ -7,6 +7,8 @@ export interface ProgramExercise {
   reps: number;
   restSeconds: number;
   notes: string | null;
+  /** Shown instead of `reps` when the coach wrote a range (8-10) or minimum (5+). Plans from a Google Sheet only. */
+  repsLabel?: string;
 }
 
 export interface ProgramSession {
@@ -23,6 +25,11 @@ export interface Program {
   notes: string | null;
   weeks: number;
   sessions: ProgramSession[];
+  /**
+   * Week-by-week plan (weeks[0] is week 1), used by plans that come from a Google Sheet.
+   * When present it is the plan, and `sessions` is ignored.
+   */
+  perWeek?: ProgramSession[][];
 }
 
 /** What the coach edits: a program that may not be saved yet. Session ids are made by the app. */

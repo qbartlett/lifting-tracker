@@ -72,16 +72,18 @@ export function createProgramWorkout(
     startTime: now,
     programRef: ref,
     exercises: session.exercises.map((item, idx) => {
-      const ex: Exercise = exercises.find((e) => e.id === item.exerciseId) ?? {
+      // Sheet plans only have names, so fall back to matching the library by name (keeps weights and history).
+      const sameName = (e: Exercise) => e.name.trim().toLowerCase() === item.name.trim().toLowerCase();
+      const ex: Exercise = exercises.find((e) => e.id === item.exerciseId) ?? exercises.find(sameName) ?? {
         id: item.exerciseId,
         name: item.name,
         category: item.category as MuscleGroup,
         equipment: item.equipment as EquipmentType,
       };
-      const weight = configs[item.exerciseId]?.currentWeight || FALLBACK_ROUTINE_WEIGHT;
+      const weight = configs[ex.id]?.currentWeight || FALLBACK_ROUTINE_WEIGHT;
       return {
         id: `we-${now}-${idx}`,
-        exerciseId: item.exerciseId,
+        exerciseId: ex.id,
         exercise: ex,
         notes: item.notes ?? undefined,
         restTimerSeconds: item.restSeconds || 120,

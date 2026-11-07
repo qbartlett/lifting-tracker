@@ -7,6 +7,8 @@ import { RateLimiter } from './ratelimit';
 import { authRoutes } from './routes/auth';
 import { coachRoutes } from './routes/coach';
 import { programRoutes } from './routes/programs';
+import { sheetRoutes } from './routes/sheets';
+import { createSheets, type SheetsApi } from './google';
 import { syncRoutes } from './routes/sync';
 
 const SECURITY_HEADERS = {
@@ -21,9 +23,10 @@ export interface App {
   idle(): Promise<void>;
 }
 
-export function createApp(deps: { sql: SQL; config: Config; mailer?: Mailer }): App {
+export function createApp(deps: { sql: SQL; config: Config; mailer?: Mailer; sheets?: SheetsApi }): App {
   const { sql, config } = deps;
   const mailer = deps.mailer ?? createMailer(config);
+  const sheets = deps.sheets ?? createSheets(config.google);
   const pending = new Set<Promise<unknown>>();
   const background = (task: Promise<unknown>) => {
     const t: Promise<unknown> = task
@@ -38,8 +41,9 @@ export function createApp(deps: { sql: SQL; config: Config; mailer?: Mailer }): 
     forgotIp: new RateLimiter(10, 60 * 60_000),
     forgotEmail: new RateLimiter(3, 60 * 60_000),
     reset: new RateLimiter(20, 60 * 60_000),
+    sheetSync: new RateLimiter(30, 10 * 60_000),
   };
-  const routes: Route[] = [...authRoutes(limits), ...coachRoutes(), ...programRoutes(), ...syncRoutes()];
+  const routes: Route[] = [...authRoutes(limits), ...coachRoutes(), ...programRoutes(), ...sheetRoutes(limits), ...syncRoutes()];
 
   function corsHeaders(req: Request): Record<string, string> {
     const origin = req.headers.get('origin');
@@ -47,7 +51,7 @@ export function createApp(deps: { sql: SQL; config: Config; mailer?: Mailer }): 
     return {
       'access-control-allow-origin': origin,
       'access-control-allow-headers': 'authorization, content-type',
-      'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'access-control-max-age': '600',
       vary: 'Origin',
     };
@@ -69,7 +73,7 @@ export function createApp(deps: { sql: SQL; config: Config; mailer?: Mailer }): 
 
       const params: Record<string, string> = {};
       r.keys.forEach((k, i) => (params[k] = decodeURIComponent(m[i + 1])));
-      const ctx = { req, url, params, ip, sql, config, mailer, background } as Ctx;
+      const ctx = { req, url, params, ip, sql, config, mailer, sheets, background } as Ctx;
 
       if (r.auth) {
         ctx.user = (await authenticate(sql, req)).user;

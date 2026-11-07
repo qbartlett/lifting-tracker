@@ -1,6 +1,7 @@
 import type { SQL } from 'bun';
 import { HttpError, route, readJson, uuidParam, type Ctx } from '../http';
 import { parseDate, parseProgram } from '../program';
+import { refreshIfStale } from '../sheetSync';
 
 const iso = (d: unknown) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10));
 
@@ -28,7 +29,8 @@ async function completions(sql: SQL, clientId: string, assignmentId: string) {
 /** The one active assignment of a client, but only while the coach link still exists. */
 async function activeAssignment(sql: SQL, clientId: string, coachId?: string) {
   const rows = await sql`
-    select a.id, a.start_date, a.created_at, a.coach_id, a.program_id, p.name, p.content, u.name as coach_name
+    select a.id, a.start_date::text as start_date, a.created_at, a.coach_id, a.program_id, p.name, p.content, u.name as coach_name,
+           (select link_id from sheet_mappings where program_id = p.id) as sheet_link_id
     from program_assignments a
     join programs p on p.id = a.program_id
     join coach_clients cc on cc.client_id = a.client_id and cc.coach_id = a.coach_id
@@ -47,7 +49,7 @@ const assignmentView = (r: any) => ({
 
 export function programRoutes() {
   async function ownProgram(ctx: Ctx, id: string) {
-    const rows = await ctx.sql`select * from programs where id = ${uuidParam(id)} and coach_id = ${ctx.user.id}`;
+    const rows = await ctx.sql`select * from programs where id = ${uuidParam(id)} and coach_id = ${ctx.user.id} and source = 'app'`;
     if (rows.length === 0) throw new HttpError(404, 'not_found');
     return rows[0];
   }
@@ -60,13 +62,13 @@ export function programRoutes() {
     route('GET', '/coach/programs', { auth: true, role: 'coach' }, async (ctx) => {
       const rows = await ctx.sql`
         select p.*, (select count(*) from program_assignments a where a.program_id = p.id and a.ended_at is null)::int as active
-        from programs p where p.coach_id = ${ctx.user.id} order by p.updated_at desc limit 200`;
+        from programs p where p.coach_id = ${ctx.user.id} and p.source = 'app' order by p.updated_at desc limit 200`;
       return { programs: rows.map((r: any) => ({ ...programRow(r), activeAssignments: r.active })) };
     }),
 
     route('POST', '/coach/programs', { auth: true, role: 'coach' }, async (ctx) => {
       const { name, content } = parseProgram(await readJson(ctx.req));
-      const count = await ctx.sql`select count(*)::int as n from programs where coach_id = ${ctx.user.id}`;
+      const count = await ctx.sql`select count(*)::int as n from programs where coach_id = ${ctx.user.id} and source = 'app'`;
       if (count[0].n >= 200) throw new HttpError(400, 'limit_reached', 'Too many programs; delete some first');
       const [row] = await ctx.sql`
         insert into programs (coach_id, name, content) values (${ctx.user.id}, ${name}, ${JSON.stringify(content)}::text::jsonb)
@@ -105,7 +107,7 @@ export function programRoutes() {
         await tx`update program_assignments set ended_at = now() where client_id = ${body.clientId as string} and ended_at is null`;
         const [a] = await tx`
           insert into program_assignments (program_id, coach_id, client_id, start_date)
-          values (${ctx.params.id}, ${ctx.user.id}, ${body.clientId as string}, ${startDate}) returning id`;
+          values (${ctx.params.id}, ${ctx.user.id}, ${body.clientId as string}, ${startDate}::date) returning id`;
         return a;
       });
       return { id: created.id, startDate };
@@ -128,6 +130,8 @@ export function programRoutes() {
     // The client's own plan.
     route('GET', '/me/program', { auth: true, role: 'client' }, async (ctx) => {
       const a = await activeAssignment(ctx.sql, ctx.user.id);
+      // The plan lives in a Google Sheet: show what we have now and pick up the coach's latest edits for next time.
+      if (a?.sheet_link_id) ctx.background(refreshIfStale(ctx.sql, ctx.sheets, a.sheet_link_id));
       return { assignment: a ? assignmentView(a) : null };
     }),
   ];

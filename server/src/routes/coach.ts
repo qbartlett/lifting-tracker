@@ -1,3 +1,4 @@
+import { dropSheetPlans } from '../sheetSync';
 import { HttpError, route, readJson, optStr, uuidParam, type Ctx } from '../http';
 import { newInviteCode, sha256 } from '../auth';
 import { pullDocs, COACH_VISIBLE_KINDS } from './sync';
@@ -63,6 +64,7 @@ export function coachRoutes() {
     route('DELETE', '/coach/clients/:id', { auth: true, role: 'coach' }, async (ctx) => {
       await requireClient(ctx, ctx.params.id);
       await ctx.sql`update program_assignments set ended_at = now() where coach_id = ${ctx.user.id} and client_id = ${ctx.params.id} and ended_at is null`;
+      await dropSheetPlans(ctx.sql, ctx.params.id, ctx.user.id);
       await ctx.sql`delete from coach_clients where coach_id = ${ctx.user.id} and client_id = ${ctx.params.id}`;
       return { ok: true };
     }),

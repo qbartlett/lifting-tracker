@@ -64,6 +64,42 @@ export interface ProgramSummary extends Program {
   activeAssignments: number;
 }
 
+export interface SheetProblem {
+  row: number;
+  column?: string;
+  message: string;
+}
+
+export interface SheetMapping {
+  tab: string;
+  clientId: string;
+  /** YYYY-MM-DD */
+  startDate: string;
+  /** The athlete has a plan from this tab (false until the first clean read). */
+  hasPlan: boolean;
+  parsedAt: string | null;
+  problems: SheetProblem[];
+}
+
+export interface SheetLink {
+  id: string;
+  title: string;
+  url: string;
+  tabs: string[];
+  lastSyncedAt: string | null;
+  lastError: string | null;
+  mappings: SheetMapping[];
+}
+
+export interface SheetsOverview {
+  /** False when the server has no Google credentials. */
+  enabled: boolean;
+  /** Coaches share their sheet with this address. */
+  serviceAccountEmail: string | null;
+  templateHeader: string[];
+  links: SheetLink[];
+}
+
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) {
     super(message);
@@ -149,6 +185,14 @@ export function createApiClient(opts: ApiClientOptions) {
     clientProgram: (clientId: string) =>
       request<{ assignment: ProgramAssignment | null; completions: ProgramCompletion[] }>('GET', `/coach/clients/${encodeURIComponent(clientId)}/program`),
     endClientProgram: (clientId: string) => request<{ ok: true }>('DELETE', `/coach/clients/${encodeURIComponent(clientId)}/program`),
+    sheets: () => request<SheetsOverview>('GET', '/coach/sheets'),
+    connectSheet: (url: string) => request<SheetLink>('POST', '/coach/sheets', { url }),
+    syncSheet: (id: string) => request<SheetLink>('POST', `/coach/sheets/${encodeURIComponent(id)}/sync`),
+    disconnectSheet: (id: string) => request<{ ok: true }>('DELETE', `/coach/sheets/${encodeURIComponent(id)}`),
+    mapSheetTab: (id: string, tab: string, clientId: string | null, startDate: string) =>
+      request<SheetLink>('PUT', `/coach/sheets/${encodeURIComponent(id)}/mappings`, { tab, clientId, startDate }),
+    addSheetTab: (id: string, clientId: string, startDate: string) =>
+      request<SheetLink>('POST', `/coach/sheets/${encodeURIComponent(id)}/tabs`, { clientId, startDate }),
     myProgram: () => request<{ assignment: ProgramAssignment | null }>('GET', '/me/program'),
 
     push: (changes: PushChange[]) => request<PushResult>('POST', '/sync/push', { changes }),

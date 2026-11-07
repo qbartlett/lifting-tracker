@@ -73,4 +73,15 @@ describe('workoutFactory', () => {
     expect(w.exercises[1].restTimerSeconds).toBe(120);
     expect(w.exercises[1].notes).toBeUndefined();
   });
+
+  it('matches a plan\'s exercise to the library by name, so the athlete keeps their weights', () => {
+    const session = {
+      id: 's', day: 0, name: 'Legs',
+      exercises: [{ exerciseId: 'sheet-squat', name: '  SQUAT ', category: 'Other', equipment: 'Other', sets: 3, reps: 5, restSeconds: 120, notes: null }],
+    };
+    const w = createProgramWorkout(session, { assignmentId: 'a', sessionId: 's', week: 0 }, [squat], configs, 1000);
+    expect(w.exercises[0].exerciseId).toBe('barbell-back-squat');
+    expect(w.exercises[0].exercise.category).toBe('Quads');
+    expect(w.exercises[0].sets[0].weight).toBe(200);
+  });
 });

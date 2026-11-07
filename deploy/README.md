@@ -61,6 +61,29 @@ docker compose start api web
 ```
 Practise a restore on a spare machine once, so you know it works.
 
+## Google Sheets (optional)
+
+This lets a coach run athletes' plans from a Google Sheet: edit the sheet, and each athlete's app shows the change. It needs a free Google "service account" that acts as the app's own Google user. You set it up once.
+
+1. Go to https://console.cloud.google.com and create a project (any name).
+2. In that project open **APIs & Services, then Library**, search for **Google Sheets API**, and click **Enable**.
+3. Open **IAM & Admin, then Service Accounts**, click **Create service account**, name it (for example `irontrack`), and finish without granting any roles.
+4. Open the new service account, go to **Keys, then Add key, then Create new key, then JSON**. A file downloads. Keep it private: anyone with it can read every sheet shared with the account.
+5. Put it on one line in `deploy/.env`, inside single quotes:
+   ```bash
+   echo "GOOGLE_SERVICE_ACCOUNT_JSON='$(tr -d '\n' < ~/Downloads/your-key.json)'" >> .env
+   ```
+   Check `.env` has just one `GOOGLE_SERVICE_ACCOUNT_JSON` line (delete the empty one from the example).
+6. `docker compose up -d`, then `docker compose logs api` should say `Google Sheets plans enabled` and show the service account's address (it ends in `.iam.gserviceaccount.com`).
+
+Coaches then open **Coach, then Sheets** in the app, which shows that address. They share their sheet with it as an **Editor** and paste the link.
+
+Good to know:
+- The app reads a connected sheet at most about once a minute, and only when someone opens their plan or the coach taps the refresh button. Google allows about 300 reads a minute per project, so one project comfortably serves many coaches.
+- A sheet can be connected by only one coach at a time.
+- Tabs the app creates need the Editor role; reading alone would only need Viewer.
+- Rotate the key (Keys, then add a new one and delete the old) if it ever leaks.
+
 ## Checks and troubleshooting
 
 - `docker compose ps`: all three services should be running (api "healthy").

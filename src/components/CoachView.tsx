@@ -8,6 +8,7 @@ import { applyRemoteChanges, type Snapshot } from '../sync/docs';
 import { describeLastWorkout, summarizeTraining } from '../domain/coachStats';
 import type { CompletedWorkout, Exercise, RoutineTemplate, WeightUnit } from '../types/lifting';
 import { ClientPlan, ProgramsSection } from './CoachPrograms';
+import { SheetsSection } from './CoachSheets';
 import { haptics } from '../utils/haptics';
 
 interface CoachViewProps {
@@ -22,7 +23,7 @@ const card = 'rounded-2xl border border-zinc-800 bg-zinc-900';
 const errorBox = 'rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300';
 
 export const CoachView: React.FC<CoachViewProps> = ({ api, unit, routines, exercises, onAddCustomExercise }) => {
-  const [section, setSection] = useState<'clients' | 'programs'>('clients');
+  const [section, setSection] = useState<'clients' | 'programs' | 'sheets'>('clients');
   const [clients, setClients] = useState<ClientRow[] | null>(null);
   const [invites, setInvites] = useState<InviteSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -97,7 +98,7 @@ export const CoachView: React.FC<CoachViewProps> = ({ api, unit, routines, exerc
   }
 
   const now = Date.now();
-  const segment = (id: 'clients' | 'programs', text: string) => (
+  const segment = (id: 'clients' | 'programs' | 'sheets', text: string) => (
     <button
       key={id}
       onClick={() => { haptics.light(); setSection(id); }}
@@ -108,10 +109,19 @@ export const CoachView: React.FC<CoachViewProps> = ({ api, unit, routines, exerc
     </button>
   );
 
+  if (section === 'sheets') {
+    return (
+      <div className="pt-4 pb-32 space-y-4">
+        <div className="flex gap-1 p-1 rounded-2xl bg-zinc-900 border border-zinc-800">{segment('clients', 'Clients')}{segment('programs', 'Programs')}{segment('sheets', 'Sheets')}</div>
+        <SheetsSection api={api} />
+      </div>
+    );
+  }
+
   if (section === 'programs') {
     return (
       <div className="pt-4 pb-32 space-y-4">
-        <div className="flex gap-1 p-1 rounded-2xl bg-zinc-900 border border-zinc-800">{segment('clients', 'Clients')}{segment('programs', 'Programs')}</div>
+        <div className="flex gap-1 p-1 rounded-2xl bg-zinc-900 border border-zinc-800">{segment('clients', 'Clients')}{segment('programs', 'Programs')}{segment('sheets', 'Sheets')}</div>
         <ProgramsSection api={api} routines={routines} exercises={exercises} onAddCustomExercise={onAddCustomExercise} />
       </div>
     );
@@ -119,7 +129,7 @@ export const CoachView: React.FC<CoachViewProps> = ({ api, unit, routines, exerc
 
   return (
     <div className="pt-4 pb-32 space-y-4">
-      <div className="flex gap-1 p-1 rounded-2xl bg-zinc-900 border border-zinc-800">{segment('clients', 'Clients')}{segment('programs', 'Programs')}</div>
+      <div className="flex gap-1 p-1 rounded-2xl bg-zinc-900 border border-zinc-800">{segment('clients', 'Clients')}{segment('programs', 'Programs')}{segment('sheets', 'Sheets')}</div>
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-black text-white tracking-tight flex items-center gap-2">
           <Users className="w-5 h-5 text-red-500" /> Clients

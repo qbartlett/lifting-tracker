@@ -92,4 +92,27 @@ describe('api client', () => {
     // The id is never sent in the body; the server takes it from the URL.
     expect(Object.keys(JSON.parse(calls[3].init.body as string)).sort()).toEqual(['name', 'notes', 'sessions', 'weeks']);
   });
+
+  it('talks to the sheet endpoints', async () => {
+    const { fn, calls } = fakeFetch(() => ({ status: 200, body: {} }));
+    const api = createApiClient({ baseUrl: '/api', getToken: () => 't', fetchFn: fn });
+    await api.sheets();
+    await api.connectSheet('https://docs.google.com/spreadsheets/d/abc');
+    await api.syncSheet('l/1');
+    await api.mapSheetTab('l1', 'Sam', 'c1', '2026-11-09');
+    await api.mapSheetTab('l1', 'Sam', null, '2026-11-09');
+    await api.addSheetTab('l1', 'c1', '2026-11-09');
+    await api.disconnectSheet('l1');
+    expect(calls.map((c) => `${c.init.method} ${c.url}`)).toEqual([
+      'GET /api/coach/sheets',
+      'POST /api/coach/sheets',
+      'POST /api/coach/sheets/l%2F1/sync',
+      'PUT /api/coach/sheets/l1/mappings',
+      'PUT /api/coach/sheets/l1/mappings',
+      'POST /api/coach/sheets/l1/tabs',
+      'DELETE /api/coach/sheets/l1',
+    ]);
+    expect(JSON.parse(calls[3].init.body as string)).toEqual({ tab: 'Sam', clientId: 'c1', startDate: '2026-11-09' });
+    expect(JSON.parse(calls[4].init.body as string).clientId).toBeNull();
+  });
 });
