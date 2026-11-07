@@ -53,6 +53,9 @@ Personal records are derived from workout history, never stored separately.
   client with a start date. The client gets a Program tab, can start any session from it (works offline from the last
   saved copy) but cannot edit it. Finished sessions are tagged on the workout (`programRef`), so the coach sees
   done / missed per session. Ending the link with the coach ends the plan.
+- Google Sheets plans (optional): a coach connects a Google Sheet with one tab per athlete. Editing the sheet updates
+  each athlete's plan in the app, week by week, with ranges like 8-10 reps. Mistakes are reported cell by cell and
+  never replace a working plan. Needs a Google service account (see `deploy/README.md`).
 
 ### Hosting
 

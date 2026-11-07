@@ -1,4 +1,4 @@
-import type { Program, ProgramAssignment, ProgramCompletion, ProgramSession } from '../types/program';
+import type { Program, ProgramCompletion, ProgramExercise, ProgramSession } from '../types/program';
 
 const DAY_MS = 86_400_000;
 export const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -67,7 +67,7 @@ export interface Schedule {
  */
 export function buildSchedule(
   startDate: string,
-  program: Pick<Program, 'weeks' | 'sessions'>,
+  program: Pick<Program, 'weeks' | 'sessions' | 'perWeek'>,
   completions: ProgramCompletion[],
   today: string
 ): Schedule {
@@ -78,11 +78,13 @@ export function buildSchedule(
     if (!prev || c.completedAt < prev.completedAt) doneBy.set(key, c); // keep the first time it was done
   }
 
+  // A plan from a sheet spells out every week; a hand-built program repeats one week.
+  const weekCount = program.perWeek ? program.perWeek.length : program.weeks;
   let done = 0, due = 0, missed = 0;
   const weeks: ScheduleWeek[] = [];
-  for (let w = 0; w < program.weeks; w++) {
+  for (let w = 0; w < weekCount; w++) {
     const sessions: ScheduledSession[] = [];
-    for (const session of [...program.sessions].sort((a, b) => a.day - b.day)) {
+    for (const session of [...(program.perWeek ? program.perWeek[w] ?? [] : program.sessions)].sort((a, b) => a.day - b.day)) {
       const date = sessionDate(startDate, w, session.day);
       if (date < startDate) continue;
       const c = doneBy.get(`${w}:${session.id}`);
@@ -99,7 +101,7 @@ export function buildSchedule(
   const lastEnd = toStr(toMs(lastStarts) + 6 * DAY_MS);
   const finished = today > lastEnd;
   let currentWeek = Math.floor((toMs(mondayOf(today)) - toMs(first)) / (7 * DAY_MS));
-  currentWeek = Math.max(0, Math.min(program.weeks - 1, currentWeek));
+  currentWeek = Math.max(0, Math.min(weekCount - 1, currentWeek));
   return { weeks, currentWeek, notStarted: today < startDate, finished, done, due, missed };
 }
 
@@ -111,3 +113,6 @@ export function describeAdherence(s: Pick<Schedule, 'done' | 'due' | 'missed'>):
 
 /** Today's date plus the weekday index (Mon = 0) for a YYYY-MM-DD string. */
 export const weekdayIndex = (date: string) => (new Date(toMs(date)).getUTCDay() + 6) % 7;
+
+/** "8-10" if the coach gave a range, otherwise the plain number. */
+export const repsText = (e: Pick<ProgramExercise, 'reps' | 'repsLabel'>) => e.repsLabel ?? String(e.reps);

@@ -42,4 +42,15 @@ describe('program cache', () => {
     expect(loadCachedAssignment('u1', bad)).toBeNull();
     expect(() => saveCachedAssignment('u1', a, bad)).not.toThrow();
   });
+
+  it('accepts week-by-week plans and rejects a malformed one', () => {
+    const kv = memory();
+    const sheetPlan = { ...a, program: { ...a.program, sessions: [], perWeek: [[a.program.sessions[0]], []] } };
+    saveCachedAssignment('u1', sheetPlan as ProgramAssignment, kv);
+    expect(loadCachedAssignment('u1', kv)).toEqual(sheetPlan as ProgramAssignment);
+    kv.setItem('irontrack_program_v1:u1', JSON.stringify({ ...a, program: { ...a.program, perWeek: [null] } }));
+    expect(loadCachedAssignment('u1', kv)).toBeNull();
+    kv.setItem('irontrack_program_v1:u1', JSON.stringify({ ...a, program: { ...a.program, perWeek: 'x' } }));
+    expect(loadCachedAssignment('u1', kv)).toBeNull();
+  });
 });

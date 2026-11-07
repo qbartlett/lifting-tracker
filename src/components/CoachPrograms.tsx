@@ -398,6 +398,7 @@ export const ClientPlan: React.FC<{ api: ApiClient; clientId: string; clientName
               {schedule.notStarted ? 'not started' : schedule.finished ? 'finished' : `week ${schedule.currentWeek + 1} of ${state.assignment.program.weeks}`}
             </div>
             <div className="text-xs text-white mt-1 font-bold">{describeAdherence(schedule)}</div>
+            {state.assignment.program.perWeek && <div className="text-[11px] text-zinc-500 mt-1">This plan comes from a Google Sheet. Edit it there (Coach, then Sheets).</div>}
           </div>
           <div className="space-y-1.5">
             {schedule.weeks.map((wk) => {

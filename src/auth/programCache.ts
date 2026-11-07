@@ -13,12 +13,15 @@ const store = (): KeyValueStore | null => {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+const validSession = (s: any) => s && typeof s.id === 'string' && Number.isInteger(s.day) && Array.isArray(s.exercises);
+
 function looksValid(a: any): a is ProgramAssignment {
   return (
     a && typeof a.id === 'string' && typeof a.startDate === 'string' && DATE_RE.test(a.startDate) &&
     a.program && typeof a.program.name === 'string' && Number.isInteger(a.program.weeks) &&
     Array.isArray(a.program.sessions) &&
-    a.program.sessions.every((s: any) => s && typeof s.id === 'string' && Number.isInteger(s.day) && Array.isArray(s.exercises))
+    a.program.sessions.every(validSession) &&
+    (a.program.perWeek === undefined || (Array.isArray(a.program.perWeek) && a.program.perWeek.every((w: any) => Array.isArray(w) && w.every(validSession))))
   );
 }
 

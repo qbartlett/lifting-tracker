@@ -1,3 +1,4 @@
+import { dropSheetPlans } from '../sheetSync';
 import {
   HttpError, json, readJson, route, str, type Ctx,
 } from '../http';
@@ -175,6 +176,7 @@ export function authRoutes(limits: {
     // A client can leave their coach at any time; the coach immediately loses access.
     route('DELETE', '/me/coach', { auth: true, role: 'client' }, async (ctx) => {
       await ctx.sql`update program_assignments set ended_at = now() where client_id = ${ctx.user.id} and ended_at is null`;
+      await dropSheetPlans(ctx.sql, ctx.user.id);
       await ctx.sql`delete from coach_clients where client_id = ${ctx.user.id}`;
       return { ok: true };
     }),
@@ -188,6 +190,7 @@ export function authRoutes(limits: {
       if (!password || !(await verifyPassword(password, row.password_hash))) {
         throw new HttpError(401, 'invalid_credentials', 'Password is incorrect');
       }
+      await dropSheetPlans(ctx.sql, ctx.user.id);
       await ctx.sql`delete from users where id = ${ctx.user.id}`;
       return { ok: true };
     }),

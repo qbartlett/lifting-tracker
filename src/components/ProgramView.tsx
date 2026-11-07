@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, Check, ChevronDown, ChevronUp, Play, RefreshCw } from 'lucide-react';
 import type { CompletedWorkout } from '../types/lifting';
 import type { ProgramAssignment, ProgramCompletion, ProgramSession } from '../types/program';
-import { buildSchedule, describeAdherence, localDateString, type ScheduledSession, type SessionStatus } from '../domain/program';
+import { buildSchedule, describeAdherence, localDateString, repsText, type ScheduledSession, type SessionStatus } from '../domain/program';
 import { haptics } from '../utils/haptics';
 
 interface ProgramViewProps {
@@ -163,7 +163,7 @@ const SessionRow: React.FC<{ item: ScheduledSession; open: boolean; onToggle: ()
             <div key={`${e.exerciseId}-${i}`} className="text-xs">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-zinc-200 truncate">{e.name}</span>
-                <span className="font-mono font-bold text-white tabular-nums shrink-0">{e.sets} × {e.reps}</span>
+                <span className="font-mono font-bold text-white tabular-nums shrink-0">{e.sets} × {repsText(e)}</span>
               </div>
               {e.notes && <div className="text-[11px] text-zinc-500 italic">{e.notes}</div>}
             </div>

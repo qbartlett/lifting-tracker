@@ -1,3 +1,5 @@
+import { loadGoogleCredentials, type GoogleCredentials } from './google';
+
 export interface Config {
   databaseUrl: string;
   port: number;
@@ -14,6 +16,8 @@ export interface Config {
   resetTtlMs: number;
   /** Trust X-Forwarded-For (only enable behind a reverse proxy you control). */
   trustProxy: boolean;
+  /** Google service account used to read coaches' sheets. Null = Sheets feature off. */
+  google: GoogleCredentials | null;
 }
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -32,5 +36,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     mailFrom: env.MAIL_FROM || null,
     resetTtlMs: Number(env.RESET_TTL_MINUTES ?? 60) * 60_000,
     trustProxy: env.TRUST_PROXY === '1',
+    google: loadGoogleCredentials(env),
   };
 }

@@ -17,6 +17,7 @@ if (!config.smtpUrl || !config.mailFrom) {
       : 'Email is not configured (SMTP_URL / MAIL_FROM): emails will be printed here instead of sent. That is fine for development.',
   );
 }
+if (config.google) console.log(`Google Sheets plans enabled. Coaches share sheets with ${config.google.clientEmail}`);
 if (!config.appUrl) console.warn('APP_URL is not set: password reset links cannot be built.');
 
 const server = Bun.serve({

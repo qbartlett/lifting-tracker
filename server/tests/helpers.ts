@@ -3,6 +3,7 @@ import { createApp, type App } from '../src/app';
 import { loadConfig } from '../src/config';
 import { migrate } from '../src/migrate';
 import type { Mail, Mailer } from '../src/mailer';
+import { SheetsError, type SheetsApi, type SpreadsheetInfo } from '../src/google';
 
 export const TEST_DB = process.env.TEST_DATABASE_URL ?? 'postgres://postgres@localhost:54329/irontrack_test';
 
@@ -24,13 +25,55 @@ export class TestMailer implements Mailer {
   }
 }
 
-export async function setup(): Promise<{ sql: SQL; app: App; api: Api; mailer: TestMailer }> {
+/** An in-memory Google: spreadsheets with tabs of cell values. */
+export class FakeSheets implements SheetsApi {
+  enabled = true;
+  serviceAccountEmail = 'bot@irontrack.test';
+  sheets = new Map<string, { title: string; tabs: Map<string, unknown[][]> }>();
+  /** Set to make every call fail the way Google would. */
+  failWith: SheetsError | null = null;
+  reads = 0;
+  infos = 0;
+  /** Spreadsheets the bot has not been shared on behave like Google: forbidden. */
+  add(id: string, title: string, tabs: Record<string, unknown[][]>) {
+    this.sheets.set(id, { title, tabs: new Map(Object.entries(tabs)) });
+  }
+  private get(id: string) {
+    if (this.failWith) throw this.failWith;
+    const s = this.sheets.get(id);
+    if (!s) throw new SheetsError('forbidden', `No access to that sheet. Share it with ${this.serviceAccountEmail} as an Editor.`);
+    return s;
+  }
+  async info(id: string): Promise<SpreadsheetInfo> {
+    this.infos++;
+    const s = this.get(id);
+    return { title: s.title, tabs: [...s.tabs.keys()] };
+  }
+  async readTabs(id: string, tabs: string[]) {
+    this.reads++;
+    const s = this.get(id);
+    const out: Record<string, unknown[][]> = {};
+    for (const t of tabs) {
+      if (!s.tabs.has(t)) throw new SheetsError('bad_request', `Unable to parse range: ${t}`); // what real Google does
+      out[t] = s.tabs.get(t)!;
+    }
+    return out;
+  }
+  async addTab(id: string, title: string, header: string[]) {
+    const s = this.get(id);
+    if (s.tabs.has(title)) throw new SheetsError('bad_request', 'A sheet with that name already exists');
+    s.tabs.set(title, [header]);
+  }
+}
+
+export async function setup(): Promise<{ sql: SQL; app: App; api: Api; mailer: TestMailer; sheets: FakeSheets }> {
   await sql.unsafe('drop schema public cascade; create schema public;');
   await migrate(sql);
   const config = loadConfig({ DATABASE_URL: TEST_DB, CORS_ORIGINS: 'https://app.example.com', APP_URL: 'https://app.example.com' });
   const mailer = new TestMailer();
-  const app = createApp({ sql, config, mailer });
-  return { sql, app, api: makeApi(app), mailer };
+  const sheets = new FakeSheets();
+  const app = createApp({ sql, config, mailer, sheets });
+  return { sql, app, api: makeApi(app), mailer, sheets };
 }
 
 export interface Reply<T = any> { status: number; body: T; headers: Headers }

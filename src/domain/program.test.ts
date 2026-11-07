@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { buildSchedule, describeAdherence, localDateString, mondayOf, sessionDate, weekdayIndex } from './program';
+import { buildSchedule, describeAdherence, localDateString, mondayOf, repsText, sessionDate, weekdayIndex } from './program';
 import type { ProgramCompletion, ProgramSession } from '../types/program';
 
 const ex = { exerciseId: 'e', name: 'E', category: 'Chest', equipment: 'Barbell', sets: 3, reps: 5, restSeconds: 90, notes: null };
@@ -97,5 +97,47 @@ describe('buildSchedule', () => {
   it('sorts sessions by weekday regardless of how the coach ordered them', () => {
     const s = buildSchedule('2026-11-09', { weeks: 1, sessions: [sess('b', 4), sess('a', 0)] }, [], '2026-11-09');
     expect(s.weeks[0].sessions.map((x) => x.session.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('week-by-week plans (from a sheet)', () => {
+  const perWeek = [
+    [sess('push', 0), sess('pull', 2)],
+    [], // a rest week
+    [sess('push', 0), sess('legs', 4)],
+  ];
+  const plan = { weeks: 3, sessions: [], perWeek };
+
+  it('uses each week\'s own sessions, including empty rest weeks', () => {
+    const s = buildSchedule('2026-11-09', plan, [done('push', 0)], '2026-11-11');
+    expect(s.weeks).toHaveLength(3);
+    expect(s.weeks.map((w) => w.sessions.map((x) => x.session.id))).toEqual([['push', 'pull'], [], ['push', 'legs']]);
+    expect(s.weeks[0].sessions.map((x) => x.status)).toEqual(['done', 'today']);
+    expect(s.weeks[2].sessions.map((x) => x.date)).toEqual(['2026-11-23', '2026-11-27']);
+  });
+
+  it('counts adherence across the weeks that have sessions', () => {
+    const s = buildSchedule('2026-11-09', plan, [done('push', 0)], '2026-12-10');
+    expect([s.done, s.due, s.missed]).toEqual([1, 4, 3]);
+    expect(s.finished).toBe(true);
+    expect(s.currentWeek).toBe(2);
+  });
+
+  it('takes the week count from the plan, not the weeks field', () => {
+    const s = buildSchedule('2026-11-09', { weeks: 99, sessions: [], perWeek: [[sess('a', 0)]] }, [], '2026-11-09');
+    expect(s.weeks).toHaveLength(1);
+  });
+
+  it('matches completions by week and session id, so the same session in another week is separate', () => {
+    const s = buildSchedule('2026-11-09', plan, [done('push', 2)], '2026-11-30');
+    expect(s.weeks[0].sessions[0].status).toBe('missed');
+    expect(s.weeks[2].sessions[0].status).toBe('done');
+  });
+});
+
+describe('repsText', () => {
+  it('shows the coach\'s range when there is one', () => {
+    expect(repsText({ reps: 8, repsLabel: '8-10' })).toBe('8-10');
+    expect(repsText({ reps: 5 })).toBe('5');
   });
 });

@@ -25,6 +25,7 @@ For a real deployment (HTTPS, app + API on one domain, backups) use [`../deploy`
 | `APP_URL` | Public address of the app, e.g. `https://app.example.com`. Used in password reset links |
 | `SMTP_URL`, `MAIL_FROM` | Outgoing email: `smtps://user:pass@host` (465) or `smtp://user:pass@host:587` (STARTTLS required). Without them, production logs a warning and reset emails are not sent; in development they print to the console |
 | `RESET_TTL_MINUTES` | Reset link lifetime, default 60 |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` / `GOOGLE_SERVICE_ACCOUNT_FILE` | Google service account key. Enables Sheets plans. Coaches share their sheet with its `client_email` |
 | `CORS_ORIGINS` | Comma-separated origins allowed from a browser. Not needed when app and API share a domain |
 | `TRUST_PROXY` | `1` only behind a reverse proxy that sets `X-Forwarded-For` |
 
@@ -57,6 +58,23 @@ Errors look like `{"error": {"code": "...", "message": "..."}}`.
 | POST | `/coach/programs/:id/assign` | coach | `{clientId, startDate}` gives it to a linked client, replacing their current plan. Week 1 is the Monday-Sunday week containing the start date |
 | GET / DELETE | `/coach/clients/:id/program` | coach | The client's plan plus the workouts they logged against it (`programRef` on a workout), or end the plan |
 | GET | `/me/program` | client | The client's current plan, or `{assignment: null}` |
+| GET | `/coach/sheets` | coach | Sheets connected, their tabs, tab-to-athlete mappings and any problems. Also whether Sheets is enabled and which address to share with |
+| POST | `/coach/sheets` | coach | `{url}` connects a Google Sheet (must be shared with the service account) |
+| POST | `/coach/sheets/:id/sync` | coach | Reads the sheet now (rate limited) |
+| PUT | `/coach/sheets/:id/mappings` | coach | `{tab, clientId \| null, startDate}` links a tab to an athlete (or unlinks) and reads it |
+| POST | `/coach/sheets/:id/tabs` | coach | `{clientId, startDate}` creates a tab with the template header and links it |
+| DELETE | `/coach/sheets/:id` | coach | Disconnects the sheet and removes the athletes' sheet plans (the sheet is untouched) |
+
+### Google Sheets plans
+
+Each athlete's tab has the columns `Week, Day, Session, Exercise, Sets, Reps, Rest (sec), Notes` (any order, friendly names accepted; see `src/sheetPlan.ts`). A read turns the tab into a week-by-week plan (`program.perWeek`). Rules:
+
+- **All or nothing per tab.** If any cell is invalid, the athlete keeps their last good plan and the coach sees the exact rows and columns to fix. Rows are never silently skipped.
+- **When it reads.** On connect, on the coach's refresh button, and in the background when an athlete opens their plan, at most once a minute per sheet (one `values:batchGet` for all mapped tabs, plus one metadata call).
+- **Plan identity.** A session is identified by weekday and name, so logged workouts keep matching it when other rows change. Renaming a session or moving its day makes earlier workouts of it appear as missed.
+- **Exercises** come from the sheet by name. The app matches them to its library by name so athletes keep their weights; unknown names still work.
+- A spreadsheet can belong to only one coach. Whoever holds the sheet's link and has it shared with the service account could connect it first, so treat sheet links as private.
+
 | GET | `/me` | user | `{user, coach}` (`coach` is null unless a linked client) |
 | DELETE | `/me/coach` | client | Leave your coach |
 | DELETE | `/me` | user | `{password}`. Deletes the account and all its data |
